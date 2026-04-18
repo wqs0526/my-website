@@ -1,0 +1,374 @@
+/* LANDING */
+/* Custom Properties */
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.8);
+  --glass-border: rgba(255, 255, 255, 0.2);
+}
+
+/* Smooth Scrolling */
+html { scroll-behavior: smooth; }
+
+/* Navbar Glassmorphism */
+.navbar {
+  backdrop-filter: blur(15px);
+  background: var(--glass-bg) !important;
+}
+
+/* Hero Section Enhancement */
+.hero-section {
+  padding: 180px 0 120px;
+  background: 
+    radial-gradient(circle at 10% 20%, rgba(46, 204, 113, 0.1) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(52, 152, 219, 0.1) 0%, transparent 40%);
+}
+
+/* Floating Animation for Icons */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.feature-icon {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* Card Hover Effects */
+.card {
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+}
+
+.card:hover {
+  transform: translateY(-10px);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.1) !important;
+}
+
+/* Steps Section */
+.step-number {
+  width: 40px;
+  height: 40px;
+  background: #2ecc71;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-bottom: 1rem;
+}
+/* GLOBAL */
+:root{
+  --brand: #2d6a4f;
+  --brand-2: #40916c;
+
+  --bg: #f6fbf8;
+  --surface: #ffffff;
+
+  --text: #1f2937;
+  --muted: #6b7280;
+
+  --radius: 16px;
+  --radius-sm: 12px;
+
+  --shadow: 0 10px 28px rgba(0,0,0,.06);
+  --shadow-hover: 0 14px 34px rgba(0,0,0,.10);
+}
+
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+body{
+  background: var(--bg);
+  color: var(--text);
+}
+
+a{ text-decoration: none; }
+
+
+:focus-visible{
+  outline: none;
+  box-shadow: 0 0 0 .2rem rgba(45, 106, 79, .20);
+  border-radius: 10px;
+}
+
+/* Navbar */
+.navbar-brand b{ color: var(--brand); }
+
+/* Cards */
+.card{
+  border: 0;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+
+.card:hover{
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-hover);
+}
+
+/* fForms */
+.form-control,
+.form-select{
+  border-radius: var(--radius-sm);
+}
+
+/* Buttons */
+.btn-brand{
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.btn-brand:hover,
+.btn-brand:focus{
+  background: var(--brand-2);
+  border-color: var(--brand-2);
+  color: #fff;
+}
+
+/* Outline-success hover */
+.btn-outline-success{
+  border-width: 2px;
+  font-weight: 600;
+  transition: transform .15s ease;
+}
+.btn-outline-success:hover{
+  transform: scale(1.03);
+}
+
+/* Dashboard/challenges "complete" buttons */
+.complete-btn-circle{
+  border-width: 2px;
+  transition: transform .2s ease, background-color .2s ease, color .2s ease;
+}
+.complete-btn-circle:hover{
+  background-color: #198754; 
+  color: #fff;
+  transform: rotate(12deg);
+}
+
+/* Badges */
+.badge-soft{
+  background: rgba(45,106,79,.12);
+  color: var(--brand);
+  border: 1px solid rgba(45,106,79,.22);
+}
+
+/* Plant rarity badges*/
+.badge-common{ background: #6c757d; color: #fff; }
+.badge-rare{ background: linear-gradient(45deg, #0d6efd, #00d4ff); color: #fff; }
+.badge-epic{
+  background: linear-gradient(45deg, #6f42c1, #a951ed);
+  color: #fff;
+  box-shadow: 0 0 10px rgba(111, 66, 193, .35);
+}
+.badge-legendary{
+  background: linear-gradient(45deg, #fd7e14, #ffc107);
+  color: #212529;
+  font-weight: 800;
+  box-shadow: 0 0 14px rgba(253, 126, 20, .45);
+  border: 1px solid rgba(255,255,255,.28);
+}
+
+
+.small-hint{ color: var(--muted); font-size: .92rem; }
+.footer-note{ color: var(--muted); font-size: .85rem; }
+.ls-1{ letter-spacing: .05rem; }
+.extra-small{ font-size: .78rem; }
+
+
+.page-header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap: 12px;
+  margin: 18px 0 14px;
+}
+.page-header h1{
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+/* KPI block */
+.kpi{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap: 10px;
+}
+.kpi .label{ color: var(--muted); font-size: .9rem; }
+.kpi .value{ font-size: 2rem; font-weight: 700; line-height: 1.1; }
+
+/* Points / streak numbers */
+.points-number{
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--brand);
+  line-height: 1;
+}
+.points-label{
+  font-size: 1rem;
+  margin-left: 4px;
+  color: #6c757d;
+}
+
+.list-empty{
+  border: 2px dashed rgba(0,0,0,.12);
+  border-radius: var(--radius);
+  padding: 18px;
+  color: var(--muted);
+  text-align:center;
+}
+
+/* Leaderboard */
+#leaderboardBody tr:hover{
+  background-color: #f8f9fa;
+}
+
+/* Celebration */
+.celebration{
+  position: fixed;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  z-index: 10000;
+
+  background: var(--surface);
+  padding: 16px 34px;
+  border-radius: 999px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.18);
+
+  font-weight: 900;
+  font-size: clamp(1.6rem, 3.2vw, 3.2rem);
+  color: #198754; /* success */
+  pointer-events: none;
+
+  animation: celebration-float 1s ease-out forwards;
+}
+
+@keyframes celebration-float{
+  0%   { opacity: 0; transform: translate(-50%, -35%) scale(.92); }
+  20%  { opacity: 1; transform: translate(-50%, -50%) scale(1.02); }
+  100% { opacity: 0; transform: translate(-50%, -120%) scale(1.10); }
+}
+
+/* Plant shop */
+.plant-card{
+  background: var(--surface);
+  transition: transform .22s ease, box-shadow .22s ease;
+}
+.plant-card:hover{
+  transform: translateY(-8px);
+  box-shadow: 0 16px 34px rgba(0,0,0,.12) !important;
+}
+
+.img-container{
+  background: radial-gradient(circle, #f8f9fa 0%, #e9ecef 100%);
+  border-radius: 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.plant-img-hover{
+  transition: transform .45s ease;
+}
+.plant-card:hover .plant-img-hover{
+  transform: scale(1.08) rotate(4deg);
+}
+
+/* Garden inventory grid items */
+.garden-item{
+  padding: 15px;
+  transition: transform .25s ease;
+}
+
+.floating-plant{
+  position: relative;
+  z-index: 2;
+  animation: sway 3s ease-in-out infinite;
+}
+
+.pot-base{
+  width: 60px;
+  height: 15px;
+  background: rgba(0,0,0,.10);
+  border-radius: 50%;
+  margin: -10px auto 0;
+  z-index: 1;
+}
+
+@keyframes sway{
+  0%, 100% { transform: rotate(-2deg) translateY(0); }
+  50%      { transform: rotate( 2deg) translateY(-5px); }
+}
+
+/* Attempt  */
+#attemptsList{
+  position: relative;
+  padding-left: 1rem;
+  border: none;
+}
+
+/* vertical line */
+#attemptsList::before{
+  content: '';
+  position: absolute;
+  left: 0.75rem;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #e9ecef;
+}
+
+.attempt-card{
+  border: none !important;
+  background: var(--surface);
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 2px 10px rgba(0,0,0,.05);
+  position: relative;
+}
+
+/* timeline dot */
+.attempt-card::before{
+  content: '';
+  position: absolute;
+  left: -1.65rem;
+  top: 1.25rem;
+  width: 12px;
+  height: 12px;
+  background: #198754;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.attempt-user-badge{
+  font-size: .7rem;
+  background: #f8f9fa;
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: #6c757d;
+}
+
+.attempt-details-box{
+  background: #f1f8f5;        /* light green tint */
+  border-left: 4px solid #198754;
+  font-style: italic;
+  border-radius: 10px;
+  padding: .6rem .8rem;
+}
+
+
+.text-orange{ color: #f97316; }
+.rotate-15{ transform: rotate(-15deg); }
+
+
+.bg-success-subtle{ background-color: #e8f5e9 !important; }
+.bg-warning-subtle{ background-color: #fff3e0 !important; }
+
+
+#pointsText, #streakText{ transition: all .5s ease-out; }

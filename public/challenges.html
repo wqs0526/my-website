@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Challenges | Wellness Challenge</title>
+  <!-- FONT AWESOME -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <!-- BOOTSTRAP -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet"
+    integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr" crossorigin="anonymous">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q" crossorigin="anonymous"
+    defer></script>
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/style.css">
+  <!-- Get URL -->
+  <script src="js/getCurrentURL.js" defer></script>
+  <!-- Get jQuery -->
+  <script src="js/queryCmds.js" defer></script>
+  <!-- JS EXTERNAL LINK -->
+  <script src="js/challenges.js" defer></script>
+  <script src="https://code.jquery.com/jquery-3.7.0.min.js"
+    integrity="sha256-2Pmvv0kuTBOenSvLm6bvfBSSHrUJ+3A7x6P5Ebd07/g=" crossorigin="anonymous" defer></script>
+</head>
+
+<body>
+  <nav class="navbar navbar-expand-lg bg-white border-bottom sticky-top">
+    <div class="container">
+      <a class="navbar-brand fw-bold text-success" href="dashboard.html">
+        <i class="fa-solid fa-leaf me-2"></i>Wellness Challenge
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div id="nav" class="collapse navbar-collapse">
+        <ul class="navbar-nav ms-auto gap-2 align-items-center">
+          <li class="nav-item"><a class="nav-link" href="dashboard.html">Dashboard</a></li>
+          <li class="nav-item"><a class="nav-link" href="challenges.html">Challenges</a></li>
+          <li class="nav-item"><a class="nav-link" href="garden.html">Garden</a></li>
+          <li class="nav-item"><a class="nav-link" href="profile.html">Profile</a></li>
+          <li class="nav-item"><button class="btn btn-outline-danger btn-sm rounded-pill px-3"
+              id="logoutBtn">Logout</button></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container py-4">
+    <div class="page-header mb-4 d-flex align-items-center">
+      <div class="bg-success bg-opacity-10 p-2 rounded-3 me-3">
+        <i class="fa-solid fa-trophy text-success fs-4"></i>
+      </div>
+      <h1 class="fw-bold h2 mb-0">Wellness Challenges</h1>
+    </div>
+
+    <div class="card border-0 shadow-sm rounded-4 p-4 mb-5 bg-white">
+      <h5 class="fw-bold mb-3"><i class="fa-solid fa-plus-circle me-2 text-primary"></i>Create New Challenge</h5>
+      <form id="createChallengeForm" class="row g-3">
+        <div class="col-md-7">
+          <label class="form-label small fw-bold text-muted">Challenge Description</label>
+          <input type="text" class="form-control bg-light border-0" id="newDesc" placeholder="e.g. Drink 2L of water"
+            required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label small fw-bold text-muted">Points</label>
+          <input type="number" class="form-control bg-light border-0" id="newPoints" placeholder="Points" required>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+          <button type="submit" class="btn btn-primary w-100 rounded-pill fw-bold">Create</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="row g-3 mb-4 align-items-center">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text bg-white border-0 shadow-sm"><i
+              class="fa-solid fa-magnifying-glass text-muted"></i></span>
+          <input class="form-control border-0 shadow-sm" id="searchInput" placeholder="Search challenges...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select class="form-select border-0 shadow-sm" id="sortSelect">
+          <option value="newest">Sort: Newest</option>
+          <option value="pointsHigh">Points: High to Low</option>
+          <option value="pointsLow">Points: Low to High</option>
+        </select>
+      </div>
+      <div class="col-md-3 text-end">
+        <a class="btn w-100 rounded-pill border-0 shadow-sm fw-bold bg-white" href="dashboard.html">
+          <i class="fa-solid fa-house me-2"></i>Dashboard
+        </a>
+      </div>
+    </div>
+
+    <div id="listArea" class="row g-4">
+    </div>
+    <div class="modal fade" id="completeModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+          <div class="modal-header border-0">
+            <h5 class="modal-title fw-bold">Reflect on your Progress</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label small fw-bold text-muted">How did this challenge go?</label>
+            <textarea id="completionComment" class="form-control bg-light border-0" rows="3"
+              placeholder="I felt energized after this..." required></textarea>
+          </div>
+          <div class="modal-footer border-0">
+            <button type="button" class="btn btn-light rounded-pill px-4" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" id="confirmCompleteBtn" class="btn btn-success rounded-pill px-4 fw-bold"
+              data-bs-dismiss="modal">Submit & Earn
+              Points</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-5 text-center list-empty" id="emptyHint">
+      <img src="https://cdn-icons-png.flaticon.com/512/7486/7486744.png" width="80" class="opacity-25 mb-3">
+      <p class="text-muted">No challenges found. Why not create one?</p>
+    </div>
+  </div>
+  <div class="modal fade" id="deleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-body text-center p-4">
+          <div class="text-danger mb-3">
+            <i class="fa-solid fa-circle-exclamation fa-3x"></i>
+          </div>
+          <h5 class="fw-bold">Are you sure?</h5>
+          <p class="text-muted small">This challenge will be permanently removed from your list.</p>
+          <div class="d-grid gap-2">
+            <button type="button" id="confirmDeleteBtn" class="btn btn-danger rounded-pill py-2">Delete Now</button>
+            <button type="button" class="btn btn-light rounded-pill py-2" data-bs-dismiss="modal">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg rounded-4">
+        <div class="modal-header border-0">
+          <h5 class="modal-title fw-bold">Edit Challenge</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="editChallengeForm">
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-muted">Description</label>
+              <input type="text" id="editDesc" class="form-control bg-light border-0" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label small fw-bold text-muted">Points</label>
+              <input type="number" id="editPoints" class="form-control bg-light border-0" min="1" required>
+            </div>
+            <div class="d-grid mt-4">
+              <button type="submit" class="btn btn-primary rounded-pill fw-bold">Save Changes</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modal fade" id="attemptsModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content border-0 shadow-lg rounded-4">
+      <div class="modal-header border-0 bg-light rounded-top-4">
+        <div>
+          <h5 class="modal-title fw-bold text-success">
+             <i class="fa-solid fa-ranking-star me-2"></i>Community Progress
+          </h5>
+          <div id="attemptsMeta" class="text-muted extra-small" style="font-size: 0.8rem;"></div>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+
+      <div class="modal-body bg-light">
+        <ul id="attemptsList" class="list-unstyled p-0"></ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+  <!-- TOAST -->
+  <div class="toast-container position-fixed bottom-0 end-0 p-3">
+    <div id="appToast" class="toast border-0 shadow" role="alert">
+      <div class="d-flex">
+        <div id="toastBody" class="toast-body">Done</div>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>
