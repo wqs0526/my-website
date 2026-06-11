@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { apiRequest, saveToken } from "../api";
 
 const initialSignupData = {
   fullName: "",
@@ -61,6 +62,8 @@ function AuthPage({ initialMode = "login" }) {
   const [loginData, setLoginData] = useState(initialLoginData);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [serverMessage, setServerMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (location.pathname === "/register") {
@@ -111,6 +114,10 @@ function AuthPage({ initialMode = "login" }) {
       errors.termsAccepted = "Please accept the terms to continue.";
     }
 
+    if (!signupData.inviteCode.trim()) {
+      errors.inviteCode = "Please enter the family invitation code.";
+    }
+
     return errors;
   }, [passwordChecks, signupData]);
 
@@ -149,12 +156,14 @@ function AuthPage({ initialMode = "login" }) {
   };
 
   const switchTo = (nextMode) => {
+    setServerMessage("");
     setMode(nextMode);
     navigate(nextMode === "signup" ? "/register" : "/login");
   };
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault();
+    setServerMessage("");
 
     const hasErrors =
       mode === "signup"
@@ -165,7 +174,34 @@ function AuthPage({ initialMode = "login" }) {
       return;
     }
 
-    navigate("/dashboard");
+    setIsSubmitting(true);
+
+    try {
+      const payload = isSignup
+        ? {
+            fullName: signupData.fullName,
+            email: signupData.email,
+            phone: signupData.phone,
+            password: signupData.password,
+            inviteCode: signupData.inviteCode,
+          }
+        : {
+            email: loginData.email,
+            password: loginData.password,
+          };
+
+      const data = await apiRequest(isSignup ? "/api/auth/register" : "/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      saveToken(data.token);
+      navigate("/dashboard");
+    } catch (error) {
+      setServerMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const isSignup = mode === "signup";
@@ -212,8 +248,8 @@ function AuthPage({ initialMode = "login" }) {
               <h2>{isSignup ? "Create your family account" : "Sign in to continue"}</h2>
               <p>
                 {isSignup
-                  ? "Set up your account now, then connect it to the backend later."
-                  : "Use your email first for now. More login methods can be connected later."}
+                  ? "Set up your account and keep your travel space connected."
+                  : "Use your email and password to continue."}
               </p>
             </div>
 
@@ -230,20 +266,9 @@ function AuthPage({ initialMode = "login" }) {
               </button>
             </div>
 
-            <div className="auth-provider-group">
-              <button type="button" className="auth-provider">
-                Continue with Google
-              </button>
-              <button type="button" className="auth-provider">
-                Continue with phone
-              </button>
-            </div>
-
-            <div className="auth-divider">
-              <span>or continue with email</span>
-            </div>
-
             <form className="auth-form" onSubmit={handleSubmit} noValidate>
+              {serverMessage ? <p className="auth-alert">{serverMessage}</p> : null}
+
               {isSignup ? (
                 <>
                   <label className="auth-field">
@@ -369,10 +394,10 @@ function AuthPage({ initialMode = "login" }) {
                       name="inviteCode"
                       value={signupData.inviteCode}
                       onChange={handleSignupChange}
-                      placeholder="Optional for now"
+                      placeholder="FAMILY"
                     />
-                    <small className="is-success">
-                      You can leave this blank until invite codes are connected.
+                    <small className={signupErrors.inviteCode ? "is-error" : "is-success"}>
+                      {signupErrors.inviteCode || "Invitation code is ready."}
                     </small>
                   </label>
 
@@ -446,15 +471,20 @@ function AuthPage({ initialMode = "login" }) {
                       <span>Remember me</span>
                     </label>
 
-                    <Link to="/register" className="auth-forgot" onClick={() => switchTo("signup")}>
-                      Forgot password?
-                    </Link>
                   </div>
                 </>
               )}
 
-              <button type="submit" className="btn btn--primary btn--large auth-submit">
-                {isSignup ? "Create account" : "Sign in"}
+              <button
+                type="submit"
+                className="btn btn--primary btn--large auth-submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting
+                  ? "Please wait..."
+                  : isSignup
+                    ? "Create account"
+                    : "Sign in"}
               </button>
             </form>
           </section>
