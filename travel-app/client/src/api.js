@@ -26,13 +26,14 @@ export async function apiRequest(path, options = {}) {
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    cache: "no-store",
     headers,
   });
 
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(data.message || "Something went wrong. Please try again.");
+    throw new Error(data.message || `Request failed with status ${response.status}.`);
   }
 
   return data;

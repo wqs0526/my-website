@@ -67,63 +67,94 @@ function Admin() {
     <AppShell user={user}>
       <section className="app-header">
         <p className="eyebrow">Admin panel</p>
-        <h1>User, content, system, and audit controls.</h1>
+        <h1>User, invite, setting, and audit controls.</h1>
+        <p>Keep family access tidy while tracking recent system activity.</p>
       </section>
 
       {message ? <p className="auth-alert">{message}</p> : null}
 
       <div className="admin-grid">
-        <section className="panel">
+        <section className="panel reveal">
           <h2>User management</h2>
-          {users.map((person) => (
-            <article className="admin-row" key={person.id}>
-              <div>
-                <strong>{person.full_name}</strong>
-                <p>{person.email} · {person.role}</p>
-              </div>
-              <div className="inline-actions">
-                <button type="button" className="btn btn--secondary" onClick={() => updateUser(person, person.role === "admin" ? "member" : "admin")}>Toggle role</button>
-                <button type="button" className="btn btn--secondary" onClick={() => deleteUser(person)}>Delete</button>
-              </div>
-            </article>
-          ))}
+          <div className="admin-table">
+            {!users.length ? <div className="empty-state"><strong>No users found</strong><p>Registered family members will appear here.</p></div> : null}
+            {users.map((person) => (
+              <article className="admin-row" key={person.id}>
+                <div>
+                  <strong>{person.full_name}</strong>
+                  <p>
+                    {person.email}
+                    <span className="ts-separator"></span>
+                    {person.role}
+                  </p>
+                </div>
+                <div className="inline-actions">
+                  <button type="button" className="btn btn--secondary" onClick={() => updateUser(person, person.role === "admin" ? "member" : "admin")}>Toggle role</button>
+                  <button type="button" className="btn btn--secondary" onClick={() => deleteUser(person)}>Delete</button>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
-        <section className="panel">
+        <section className="panel reveal">
           <h2>Invitation codes</h2>
-          <form className="inline-form" onSubmit={saveInvite}>
+          <form className="inline-form mb-3" onSubmit={saveInvite}>
             <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
             <button type="submit" className="btn btn--primary">Save code</button>
           </form>
-          {codes.map((code) => (
-            <article className="admin-row" key={code.id}>
-              <strong>{code.code}</strong>
-              <button type="button" className="btn btn--secondary" onClick={() => toggleInvite(code)}>
-                {code.is_active ? "Deactivate" : "Activate"}
-              </button>
-            </article>
-          ))}
+          <div className="admin-table">
+            {!codes.length ? <div className="empty-state"><strong>No invite codes</strong><p>Create a family code to control access.</p></div> : null}
+            {codes.map((code) => (
+              <article className="admin-row" key={code.id}>
+                <div>
+                  <strong>{code.code}</strong>
+                  <p>{code.is_active ? "Active" : "Inactive"}</p>
+                </div>
+                <button type="button" className="btn btn--secondary" onClick={() => toggleInvite(code)}>
+                  {code.is_active ? "Deactivate" : "Activate"}
+                </button>
+              </article>
+            ))}
+          </div>
         </section>
 
-        <section className="panel">
+        <section className="panel reveal">
           <h2>System configuration</h2>
           <form className="form-grid" onSubmit={saveSetting}>
             <input placeholder="Setting key" value={setting.key} onChange={(e) => setSetting({ ...setting, key: e.target.value })} />
             <textarea placeholder="Setting value" value={setting.value} onChange={(e) => setSetting({ ...setting, value: e.target.value })}></textarea>
             <button type="submit" className="btn btn--primary">Save setting</button>
           </form>
-          {settings.map((item) => <p key={item.id}><strong>{item.setting_key}:</strong> {item.setting_value}</p>)}
+          <div className="admin-table mt-3">
+            {!settings.length ? <div className="empty-state"><strong>No settings saved</strong><p>System configuration entries will appear here.</p></div> : null}
+            {settings.map((item) => (
+              <article className="admin-row" key={item.id}>
+                <div>
+                  <strong>{item.setting_key}</strong>
+                  <p>{item.setting_value || "No value set"}</p>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
 
-        <section className="panel">
+        <section className="panel reveal">
           <h2>Monitoring and audit logs</h2>
-          {logs.map((log) => (
-            <article className="log-row" key={log.id}>
-              <strong>{log.action}</strong>
-              <p>{log.details}</p>
-              <small>{log.user_email || "system"} · {new Date(log.created_at).toLocaleString()}</small>
-            </article>
-          ))}
+          <div className="audit-stream">
+            {!logs.length ? <div className="empty-state"><strong>No audit logs yet</strong><p>Important account and admin actions will appear here.</p></div> : null}
+            {logs.map((log) => (
+              <article className="log-row" key={log.id}>
+                <strong>{log.action}</strong>
+                <p>{log.details}</p>
+                <small>
+                  {log.user_email || "system"}
+                  <span className="ts-separator"></span>
+                  {new Date(log.created_at).toLocaleString()}
+                </small>
+              </article>
+            ))}
+          </div>
         </section>
       </div>
     </AppShell>

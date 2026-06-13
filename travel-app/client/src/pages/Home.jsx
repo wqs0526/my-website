@@ -29,113 +29,71 @@ function Home() {
       <Navbar />
 
       <main>
-        <section className="hero py-5" id="home">
+        <section className="hero hero--immersive" id="home">
           <div className="container-xxl">
-            <div className="row align-items-center g-5">
-              <div className="col-lg-7">
-                <div className="hero__content">
-                  <p className="eyebrow">Our family travel space</p>
-                  <h1>A calm place to plan trips and keep the memories together.</h1>
-                  <p className="hero__text">
-                    This space is for us. It keeps upcoming plans, useful
-                    details, and favourite moments in one warm, easy-to-check
-                    home so every trip feels more organised and every memory is
-                    easier to return to.
-                  </p>
+            <div className="hero__content">
+              <p className="hero-kicker">Our family travel space</p>
+              <h1>Plan the next adventure. Relive every moment after.</h1>
+              <p className="hero__text">
+                TravelSync keeps upcoming plans, useful details, and favourite
+                moments in one private family workspace that feels easy to open
+                before, during, and after every trip.
+              </p>
 
-                  <div className="hero__actions d-flex flex-wrap gap-3">
-                    <Link to="/login" className="btn btn--primary btn--large">
-                      Open our space
-                    </Link>
-                    <a href="#memories" className="btn btn--secondary btn--large">
-                      See how it feels
-                    </a>
-                  </div>
-
-                  <div className="row g-3">
-                    <div className="col-12 col-md-4">
-                      <div className="stat-card h-100">
-                        <span className="stat-label">Upcoming</span>
-                        <h3>One shared trip board</h3>
-                        <p>
-                          Dates, ideas, places, and reminders collected in one
-                          view.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <div className="stat-card h-100">
-                        <span className="stat-label">After the trip</span>
-                        <h3>A simple memory corner</h3>
-                        <p>
-                          Photos, notes, and stories saved by destination and
-                          day.
-                        </p>
-                      </div>
-                    </div>
-                    <div className="col-12 col-md-4">
-                      <div className="stat-card h-100">
-                        <span className="stat-label">For everyone</span>
-                        <h3>Less chat chaos</h3>
-                        <p>
-                          Useful updates stay easy to find when someone needs
-                          them.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+              <div className="hero__actions d-flex flex-wrap gap-3 justify-content-start">
+                <Link to="/login" className="btn btn--primary btn--large">
+                  Start planning
+                </Link>
+                <Link to="/register" className="btn btn--secondary btn--large">
+                  Join the family space
+                </Link>
               </div>
 
-              <div className="col-lg-5">
-                <div className="hero__visual d-flex align-items-center justify-content-center">
-                  <div className="postcard-stack">
-                    <article className="postcard postcard--main">
-                      <p className="mockup-label">Next family trip</p>
-                      <h3>Weekend in Kyoto</h3>
-                      <ul className="postcard-list">
-                        <li>Saturday breakfast spot saved</li>
-                        <li>Temple walk added for the afternoon</li>
-                        <li>Photo places pinned for sunset</li>
-                      </ul>
-                    </article>
-
-                    <article className="postcard postcard--note postcard--top">
-                      <p className="mockup-label">Shared reminder</p>
-                      <span>
-                        Bring passports, chargers, snacks, and camera batteries.
-                      </span>
-                    </article>
-
-                    <article className="postcard postcard--note postcard--bottom">
-                      <p className="mockup-label">Saved memory</p>
-                      <span>
-                        Favourite ramen shop and the photo outside the station.
-                      </span>
-                    </article>
-                  </div>
-                </div>
+              <div className="travel-chip-row">
+                <span className="travel-chip">Trip boards</span>
+                <span className="travel-chip">Family memories</span>
+                <span className="travel-chip">Shared plans</span>
               </div>
             </div>
           </div>
         </section>
 
-        <section className="section section--soft py-5" id="memories">
+        <div className="container-xxl">
+          <div className="hero-tray reveal">
+            <article className="stat-card">
+              <span className="stat-label">Before</span>
+              <h3>Build the shared plan</h3>
+              <p>Dates, places, reminders, and ideas become one clear travel board.</p>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">During</span>
+              <h3>Keep details close</h3>
+              <p>Everyone can check what matters without searching old messages.</p>
+            </article>
+            <article className="stat-card">
+              <span className="stat-label">After</span>
+              <h3>Save the feeling</h3>
+              <p>Stories and media links stay connected to the trips they came from.</p>
+            </article>
+          </div>
+        </div>
+
+        <section className="section section--soft" id="memories">
           <div className="container-xxl">
-            <div className="section-heading section-heading--left">
-              <p className="eyebrow">Why this page feels different</p>
-              <h2>More like a family scrapbook, less like a product homepage.</h2>
+            <div className="section-heading reveal">
+              <p className="eyebrow">Family-first planning</p>
+              <h2>Useful before the trip, warm after the trip.</h2>
               <p>
-                The goal is not to sell anything. It is simply to welcome our
-                family into a shared place where planning feels lighter and old
-                trips stay easy to revisit.
+                The site is designed as a practical travel board and a simple
+                scrapbook, so the whole family can find plans quickly and return
+                to the stories later.
               </p>
             </div>
 
             <div className="row g-4">
               {highlights.map((item) => (
                 <div className="col-12 col-lg-4" key={item.title}>
-                  <article className="feature-card h-100">
+                  <article className="feature-card reveal">
                     <div className="feature-badge">{item.title.slice(0, 1)}</div>
                     <h3>{item.title}</h3>
                     <p>{item.text}</p>
@@ -146,44 +104,47 @@ function Home() {
           </div>
         </section>
 
-        <section className="section py-5" id="trip-board">
+        <section className="section" id="trip-board">
           <div className="container-xxl">
+            <div className="section-heading reveal">
+              <p className="eyebrow">Memory album preview</p>
+              <h2>Small moments can feel big again.</h2>
+              <p>TravelSync treats each note like part of a family story, not another admin record.</p>
+            </div>
+            <div className="memory-strip mb-5">
+              {memoryMoments.map((moment, index) => (
+                <article className="memory-tile reveal" key={moment}>
+                  <strong>Memory {index + 1}</strong>
+                  <span>{moment}</span>
+                </article>
+              ))}
+            </div>
             <div className="row g-4 align-items-stretch">
               <div className="col-12 col-lg-6">
-                <div className="split-card split-card--warm h-100">
+                <div className="split-card h-100 reveal">
                   <p className="eyebrow">How we can use it</p>
-                  <h2>
-                    Before, during, and after each trip, everything stays
-                    connected.
-                  </h2>
+                  <h2>Before, during, and after each trip, everything stays connected.</h2>
                   <p>
                     We can sketch plans before leaving, check small details
                     while we are out, and come back later to the photos and
-                    notes that mattered most. Nothing fancy, just a better way
-                    to keep our trips together.
+                    notes that mattered most.
                   </p>
 
                   <ul className="check-list">
                     <li>Plan days without losing everyone's suggestions</li>
-                    <li>
-                      Keep important notes where the family can actually find
-                      them
-                    </li>
-                    <li>
-                      Save memories with context instead of random photo folders
-                    </li>
+                    <li>Keep important notes where the family can find them</li>
+                    <li>Save memories with context instead of random photo folders</li>
                     <li>Make future trips easier by learning from past ones</li>
                   </ul>
                 </div>
               </div>
 
               <div className="col-12 col-lg-6">
-                <div className="split-panel h-100">
-                  <div className="activity-card h-100">
+                <div className="split-panel h-100 reveal">
+                  <div className="activity-card">
                     <p className="activity-title">Little things worth keeping</p>
                     {memoryMoments.map((moment) => (
                       <div className="activity-item" key={moment}>
-                        <span className="dot"></span>
                         <p>{moment}</p>
                       </div>
                     ))}
@@ -198,10 +159,7 @@ function Home() {
           <div className="container-xxl">
             <div className="cta-box">
               <p className="eyebrow">Ready when we are</p>
-              <h2>
-                A simple home for the trips we have taken and the ones still
-                ahead.
-              </h2>
+              <h2>A simple home for trips taken and trips still ahead.</h2>
               <p>
                 Sign in to continue planning, add new memories, or open a trip
                 and see what everyone has already saved there.

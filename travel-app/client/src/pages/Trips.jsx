@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { apiRequest } from "../api";
 import AppShell from "../components/AppShell";
 import useCurrentUser from "../hooks/useCurrentUser";
+import { formatTripDateRange, getTripStatus } from "../utils/tripStatus";
 
 const blankTrip = { title: "", destination: "", startDate: "", endDate: "", notes: "" };
 
@@ -12,21 +13,33 @@ function Trips() {
   const [form, setForm] = useState(blankTrip);
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadTrips = () => {
-    apiRequest("/api/trips")
-      .then((data) => {
-        setTrips(data.trips);
-        setMessage("");
-      })
-      .catch((error) => setMessage(error.message));
+  const loadTrips = async () => {
+    setIsLoading(true);
+
+    try {
+      const data = await apiRequest("/api/trips");
+      setTrips(data.trips || []);
+      setMessage("");
+      return data.trips || [];
+    } catch (error) {
+      setMessage(error.message);
+      return [];
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  useEffect(loadTrips, []);
+  useEffect(() => {
+    loadTrips();
+  }, []);
 
   const saveTrip = async (event) => {
     event.preventDefault();
     setMessage("");
+    setIsSaving(true);
     const body = JSON.stringify(form);
 
     try {
@@ -37,9 +50,11 @@ function Trips() {
       }
       setForm(blankTrip);
       setEditingId(null);
-      loadTrips();
+      await loadTrips();
     } catch (error) {
       setMessage(error.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -57,7 +72,7 @@ function Trips() {
   const deleteTrip = async (trip) => {
     if (!window.confirm(`Delete ${trip.title}?`)) return;
     await apiRequest(`/api/trips/${trip.id}`, { method: "DELETE" });
-    loadTrips();
+    await loadTrips();
   };
 
   return (
@@ -65,6 +80,7 @@ function Trips() {
       <section className="app-header">
         <p className="eyebrow">Trip board</p>
         <h1>Plan the family trips day by day.</h1>
+        <p>Create trip boards, keep dates visible, and open each itinerary when the details matter.</p>
       </section>
 
       <div className="workspace-grid">
@@ -77,7 +93,9 @@ function Trips() {
           <input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
           <textarea placeholder="Trip notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })}></textarea>
           <div className="inline-actions">
-            <button type="submit" className="btn btn--primary">{editingId ? "Save changes" : "Add trip"}</button>
+            <button type="submit" className="btn btn--primary" disabled={isSaving}>
+              {isSaving ? "Saving..." : editingId ? "Save changes" : "Add trip"}
+            </button>
             {editingId ? <button type="button" className="btn btn--secondary" onClick={() => { setEditingId(null); setForm(blankTrip); }}>Cancel</button> : null}
           </div>
         </form>
@@ -85,24 +103,51 @@ function Trips() {
         <section className="panel list-panel">
           <h2>Family trips</h2>
           {message ? <p className="auth-alert">{message}</p> : null}
-          {trips.map((trip) => (
-            <article className="list-item" key={trip.id}>
-              <div>
-                <h3>{trip.title}</h3>
-                <p>{trip.destination} · {trip.activity_count} plan items</p>
-                <small>Created by {trip.creator_name || "Unknown"}</small>
-              </div>
-              <div className="inline-actions">
-                <Link to={`/trips/${trip.id}`} className="btn btn--secondary">Open</Link>
-                {(user?.role === "admin" || user?.id === trip.created_by) ? (
-                  <>
-                    <button type="button" className="btn btn--secondary" onClick={() => startEdit(trip)}>Edit</button>
-                    <button type="button" className="btn btn--secondary" onClick={() => deleteTrip(trip)}>Delete</button>
-                  </>
-                ) : null}
-              </div>
-            </article>
-          ))}
+          {isLoading ? (
+            <div className="trip-grid">
+              <div className="skeleton"></div>
+              <div className="skeleton"></div>
+            </div>
+          ) : null}
+          {!isLoading && !trips.length && !message ? (
+            <div className="empty-state">
+              <strong>Start planning your first adventure.</strong>
+              <p>Add a destination on the left and turn it into a family itinerary.</p>
+            </div>
+          ) : null}
+          {!isLoading ? <div className="trip-grid">
+            {trips.map((trip) => {
+              const status = getTripStatus(trip);
+
+              return (
+                <article className="list-item ts-card destination-card trip-card" key={trip.id}>
+                  <div className="trip-card__top">
+                    <span className={`trip-status trip-status--${status.tone}`}>{status.label}</span>
+                    <span className="countdown-pill">{status.countdown}</span>
+                  </div>
+                  <div className="trip-card__body">
+                    <span className="stat-label">Destination</span>
+                    <h3>{trip.title}</h3>
+                    <p className="trip-card__destination">{trip.destination}</p>
+                    <p className="trip-card__dates">{formatTripDateRange(trip.start_date, trip.end_date)}</p>
+                  </div>
+                  <div className="trip-card__meta">
+                    <span>{trip.activity_count} plan items</span>
+                    <span>Created by {trip.creator_name || "Unknown"}</span>
+                  </div>
+                  <div className="trip-card-footer">
+                    <Link to={`/trips/${trip.id}`} className="btn btn--primary">Open itinerary</Link>
+                    {(user?.role === "admin" || user?.id === trip.created_by) ? (
+                      <div className="inline-actions">
+                        <button type="button" className="btn btn--secondary" onClick={() => startEdit(trip)}>Edit</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => deleteTrip(trip)}>Delete</button>
+                      </div>
+                    ) : null}
+                  </div>
+                </article>
+              );
+            })}
+          </div> : null}
         </section>
       </div>
     </AppShell>

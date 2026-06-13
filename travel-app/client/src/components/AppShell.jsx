@@ -10,8 +10,8 @@ function AppShell({ children, user }) {
   };
 
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
+    <div className="app-shell app-layout">
+      <aside className="app-sidebar sidebar">
         <NavLink to="/" className="navbar__logo">
           <span className="logo-mark">TS</span>
           <span className="logo-text">TravelSync</span>
@@ -34,7 +34,7 @@ function AppShell({ children, user }) {
         </div>
       </aside>
 
-      <main className="app-content">{children}</main>
+      <main className="app-content main-content">{children}</main>
     </div>
   );
 }
