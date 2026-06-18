@@ -43,6 +43,13 @@ async function setupDatabase() {
 
   const schema = fs.readFileSync(path.join(__dirname, "..", "schema.sql"), "utf8");
   await connection.query(schema);
+
+  const adminEmail = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+
+  if (adminEmail) {
+    await connection.query("UPDATE users SET role = 'admin' WHERE email = ?", [adminEmail]);
+  }
+
   await connection.query(`
     CREATE TABLE IF NOT EXISTS trip_members (
       trip_id INT UNSIGNED NOT NULL,

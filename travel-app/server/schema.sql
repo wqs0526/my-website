@@ -32,8 +32,6 @@ INSERT INTO invitation_codes (code, is_active)
 VALUES ('FAMILY', 1)
 ON DUPLICATE KEY UPDATE is_active = 1;
 
-UPDATE users SET role = 'admin' WHERE email = 'wqs040526@gmail.com';
-
 CREATE TABLE IF NOT EXISTS trips (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   title VARCHAR(160) NOT NULL,
