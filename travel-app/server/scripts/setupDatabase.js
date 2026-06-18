@@ -17,11 +17,9 @@ async function setupDatabase() {
     port: Number(process.env.DB_PORT),
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
     multipleStatements: true,
   });
-
-  await connection.query(`CREATE DATABASE IF NOT EXISTS \`${process.env.DB_NAME}\``);
-  await connection.query(`USE \`${process.env.DB_NAME}\``);
 
   const [tables] = await connection.query(
     "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'users'",
