@@ -65,17 +65,51 @@ function Admin() {
 
   return (
     <AppShell user={user}>
-      <section className="app-header">
-        <p className="eyebrow">Admin panel</p>
-        <h1>User, invite, setting, and audit controls.</h1>
-        <p>Keep family access tidy while tracking recent system activity.</p>
+      <section className="admin-hero travel-hero reveal">
+        <div className="travel-hero__copy">
+          <p className="eyebrow">Admin panel</p>
+          <h1>User, invite, setting, and audit controls.</h1>
+          <p>Keep family access tidy while tracking recent system activity.</p>
+        </div>
       </section>
 
       {message ? <p className="auth-alert">{message}</p> : null}
 
-      <div className="admin-grid">
-        <section className="panel reveal">
-          <h2>User management</h2>
+      <section className="admin-analytics-band reveal">
+        <article className="admin-kpi">
+          <span className="stat-label">Users</span>
+          <strong className="metric-value">{users.length}</strong>
+          <div className="admin-bar"><i style={{ width: `${Math.min(100, users.length * 16 + 20)}%` }}></i></div>
+          <p>Registered family members.</p>
+        </article>
+        <article className="admin-kpi">
+          <span className="stat-label">Invites</span>
+          <strong className="metric-value">{codes.length}</strong>
+          <div className="admin-bar"><i style={{ width: `${Math.min(100, codes.length * 20 + 20)}%` }}></i></div>
+          <p>Access codes in the system.</p>
+        </article>
+        <article className="admin-kpi">
+          <span className="stat-label">Settings</span>
+          <strong className="metric-value">{settings.length}</strong>
+          <div className="admin-bar"><i style={{ width: `${Math.min(100, settings.length * 22 + 20)}%` }}></i></div>
+          <p>Configuration entries.</p>
+        </article>
+        <article className="admin-kpi">
+          <span className="stat-label">Audit Logs</span>
+          <strong className="metric-value">{logs.length}</strong>
+          <div className="admin-bar"><i style={{ width: `${Math.min(100, logs.length * 8 + 20)}%` }}></i></div>
+          <p>Recent tracked actions.</p>
+        </article>
+      </section>
+
+      <div className="admin-console-grid">
+        <section className="panel admin-analytics-card reveal">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">People</p>
+              <h2>User management</h2>
+            </div>
+          </div>
           <div className="admin-table">
             {!users.length ? <div className="empty-state"><strong>No users found</strong><p>Registered family members will appear here.</p></div> : null}
             {users.map((person) => (
@@ -97,8 +131,13 @@ function Admin() {
           </div>
         </section>
 
-        <section className="panel reveal">
-          <h2>Invitation codes</h2>
+        <section className="panel admin-analytics-card reveal">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Access</p>
+              <h2>Invitation codes</h2>
+            </div>
+          </div>
           <form className="inline-form mb-3" onSubmit={saveInvite}>
             <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
             <button type="submit" className="btn btn--primary">Save code</button>
@@ -119,8 +158,13 @@ function Admin() {
           </div>
         </section>
 
-        <section className="panel reveal">
-          <h2>System configuration</h2>
+        <section className="panel admin-analytics-card reveal">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Configuration</p>
+              <h2>System configuration</h2>
+            </div>
+          </div>
           <form className="form-grid" onSubmit={saveSetting}>
             <input placeholder="Setting key" value={setting.key} onChange={(e) => setSetting({ ...setting, key: e.target.value })} />
             <textarea placeholder="Setting value" value={setting.value} onChange={(e) => setSetting({ ...setting, value: e.target.value })}></textarea>
@@ -139,8 +183,13 @@ function Admin() {
           </div>
         </section>
 
-        <section className="panel reveal">
-          <h2>Monitoring and audit logs</h2>
+        <section className="panel admin-analytics-card reveal">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Monitoring</p>
+              <h2>Audit logs</h2>
+            </div>
+          </div>
           <div className="audit-stream">
             {!logs.length ? <div className="empty-state"><strong>No audit logs yet</strong><p>Important account and admin actions will appear here.</p></div> : null}
             {logs.map((log) => (

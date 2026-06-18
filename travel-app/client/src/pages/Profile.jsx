@@ -21,16 +21,10 @@ function Profile() {
 
   return (
     <AppShell user={user}>
-      <section className="app-header">
-        <p className="eyebrow">Profile</p>
-        <h1>{user?.fullName || "Your profile"}</h1>
-        <p>Your personal TravelSync overview, family access details, and travel story so far.</p>
-      </section>
-
-      <section className="profile-hero profile-hero--premium reveal">
+      <section className="profile-hero profile-hero--premium travel-hero reveal">
         <div>
           <p className="eyebrow">Family traveller</p>
-          <h2>{user?.fullName || "TravelSync member"}</h2>
+          <h1>{user?.fullName || "TravelSync member"}</h1>
           <p>
             You have planned {stats.trips} trips, saved {stats.memories} memories,
             and added {stats.activities} itinerary moments.
@@ -42,30 +36,37 @@ function Profile() {
         </div>
       </section>
 
-      <section className="profile-stat-grid reveal">
-        <article className="metric-card">
+      <section className="passport-stamp-strip reveal">
+        <article className="passport-stamp">
           <span className="stat-label">Trip Count</span>
           <strong className="metric-value">{stats.trips}</strong>
           <p>Trips you created.</p>
         </article>
-        <article className="metric-card">
+        <article className="passport-stamp">
           <span className="stat-label">Memory Count</span>
           <strong className="metric-value">{stats.memories}</strong>
           <p>Stories you preserved.</p>
         </article>
-        <article className="metric-card">
-          <span className="stat-label">Completed</span>
+        <article className="passport-stamp">
+          <span className="stat-label">Cities Visited</span>
           <strong className="metric-value">{stats.completedTrips}</strong>
-          <p>Your finished adventures.</p>
+          <p>Completed trip destinations.</p>
         </article>
-        <article className="metric-card">
-          <span className="stat-label">Activities</span>
+        <article className="passport-stamp">
+          <span className="stat-label">Favourite Trip</span>
           <strong className="metric-value">{stats.activities}</strong>
-          <p>Plans and notes you added.</p>
+          <p>Plans and notes saved.</p>
         </article>
       </section>
 
-      <section className="panel profile-panel reveal">
+      <section className="panel profile-panel passport-panel reveal">
+        <div className="memory-panel-heading">
+          <div>
+            <p className="eyebrow">Travel passport</p>
+            <h2>Account and family access</h2>
+          </div>
+          <span className="countdown-pill">{user?.role || "member"}</span>
+        </div>
         <div className="profile-grid">
           <div className="profile-item">
             <strong>Email</strong>
@@ -83,6 +84,36 @@ function Profile() {
             <strong>Invitation code used</strong>
             <p>{user?.inviteCode}</p>
           </div>
+        </div>
+      </section>
+
+      <section className="achievement-grid passport-achievements reveal">
+        <article className="achievement-card">
+          <span>Badge 01</span>
+          <strong>Route Builder</strong>
+          <p>Created and shaped family trip boards.</p>
+        </article>
+        <article className="achievement-card">
+          <span>Badge 02</span>
+          <strong>Memory Keeper</strong>
+          <p>Saved moments so the trip still has a place to live.</p>
+        </article>
+        <article className="achievement-card">
+          <span>Badge 03</span>
+          <strong>Day Planner</strong>
+          <p>Added activities, notes, reminders, and itinerary details.</p>
+        </article>
+      </section>
+
+      <section className="travel-history-timeline reveal">
+        <div>
+          <p className="eyebrow">Travel history</p>
+          <h2>Passport timeline</h2>
+        </div>
+        <div className="history-line">
+          <span><strong>{stats.completedTrips}</strong> completed adventures</span>
+          <span><strong>{stats.upcomingTrips}</strong> upcoming plans</span>
+          <span><strong>{stats.memories}</strong> saved memories</span>
         </div>
       </section>
     </AppShell>

@@ -24,13 +24,17 @@ function TripDetail() {
   const [activities, setActivities] = useState([]);
   const [packingItems, setPackingItems] = useState([]);
   const [expenses, setExpenses] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [availableUsers, setAvailableUsers] = useState([]);
   const [activityForm, setActivityForm] = useState(blankActivity);
   const [dayForm, setDayForm] = useState({ dayNumber: 1, date: "", title: "" });
   const [packingItem, setPackingItem] = useState("");
   const [expenseForm, setExpenseForm] = useState(blankExpense);
+  const [memberToAdd, setMemberToAdd] = useState("");
   const [editingActivityId, setEditingActivityId] = useState(null);
   const [editingDayId, setEditingDayId] = useState(null);
   const [message, setMessage] = useState("");
+  const [activeDay, setActiveDay] = useState(null);
 
   const loadTrip = () => {
     apiRequest(`/api/trips/${id}`).then((data) => {
@@ -39,6 +43,8 @@ function TripDetail() {
       setActivities(data.activities);
       setPackingItems(data.packingItems || []);
       setExpenses(data.expenses || []);
+      setMembers(data.members || []);
+      setAvailableUsers(data.availableUsers || []);
       setMessage("");
     }).catch((error) => {
       setMessage(error.message);
@@ -214,15 +220,50 @@ function TripDetail() {
     }
   };
 
+  const addTripMember = async (event) => {
+    event.preventDefault();
+    if (!memberToAdd) return;
+    setMessage("");
+
+    try {
+      await apiRequest(`/api/trips/${id}/members`, {
+        method: "POST",
+        body: JSON.stringify({ userId: memberToAdd }),
+      });
+      setMemberToAdd("");
+      loadTrip();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
+  const removeTripMember = async (member) => {
+    setMessage("");
+
+    try {
+      await apiRequest(`/api/trips/${id}/members/${member.id}`, { method: "DELETE" });
+      loadTrip();
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
   const canEditTrip = user?.role === "admin" || user?.id === trip?.created_by;
   const tripStatus = getTripStatus(trip);
+  const visibleDays = activeDay ? days.filter((day) => day.day_number === activeDay) : days;
+  const addableMembers = availableUsers.filter((person) => !members.some((member) => Number(member.id) === Number(person.id)));
+  const mapQuery = encodeURIComponent(trip?.destination || trip?.title || "Singapore");
+  const mapUrl = `https://www.google.com/maps?q=${mapQuery}&output=embed`;
+  const mapLink = `https://www.google.com/maps/search/?api=1&query=${mapQuery}`;
 
   return (
     <AppShell user={user}>
-      <section className="app-header trip-detail-hero">
-        <p className="eyebrow">Day-by-day plan</p>
-        <h1>{trip?.title || "Loading trip..."}</h1>
-        <p>{trip?.destination}</p>
+      <section className="app-header trip-detail-hero travel-hero reveal">
+        <div className="travel-hero__copy">
+          <p className="eyebrow">Day-by-day plan</p>
+          <h1>{trip?.title || "Loading trip..."}</h1>
+          <p>{trip?.destination}</p>
+        </div>
         <div className="trip-detail-meta">
           <span className={`trip-status trip-status--${tripStatus.tone}`}>{tripStatus.label}</span>
           <span className="countdown-pill">{tripStatus.countdown}</span>
@@ -238,8 +279,8 @@ function TripDetail() {
         {message ? <p className="auth-alert mt-3">{message}</p> : null}
       </section>
 
-      <section className="trip-tools-grid reveal">
-        <article className="panel travel-tool-card">
+      <section className="trip-planning-overview reveal">
+        <article className="planning-overview-panel planning-overview-panel--packing">
           <div className="tool-card-heading">
             <div>
               <p className="eyebrow">Packing checklist</p>
@@ -272,7 +313,14 @@ function TripDetail() {
           </div>
         </article>
 
-        <article className="panel travel-tool-card">
+        <article className="planning-overview-panel planning-overview-panel--expenses">
+          <div className="planning-panel-top">
+            <div>
+              <span>Expenses</span>
+              <strong>${totalSpent.toFixed(2)} spent</strong>
+            </div>
+            <small>${remainingBudget.toFixed(2)} remaining</small>
+          </div>
           <div className="tool-card-heading">
             <div>
               <p className="eyebrow">Budget tracker</p>
@@ -316,9 +364,146 @@ function TripDetail() {
             )}
           </div>
         </article>
+
+        <article className="planning-overview-panel planning-overview-panel--compact">
+          <div className="planning-panel-top">
+            <div>
+              <span>Members</span>
+              <strong>{user?.role || "member"}</strong>
+            </div>
+            <small>Shared board</small>
+          </div>
+          <div className="member-strip">
+            {members.length ? members.map((member) => (
+              <span className="member-chip-row" key={member.id}>
+                <b>{member.full_name}</b>
+                <small>{member.role}</small>
+                {canEditTrip ? <button type="button" onClick={() => removeTripMember(member)}>Remove</button> : null}
+              </span>
+            )) : <span>No members added yet.</span>}
+          </div>
+          {canEditTrip ? (
+            <form className="inline-form member-add-form" onSubmit={addTripMember}>
+              <select value={memberToAdd} onChange={(event) => setMemberToAdd(event.target.value)}>
+                <option value="">Add family member</option>
+                {addableMembers.map((person) => (
+                  <option value={person.id} key={person.id}>{person.full_name} ({person.email})</option>
+                ))}
+              </select>
+              <button type="submit" className="btn btn--primary" disabled={!memberToAdd}>Add</button>
+            </form>
+          ) : null}
+        </article>
+
+        <article className="planning-overview-panel planning-overview-panel--compact">
+          <div className="planning-panel-top">
+            <div>
+              <span>Notes</span>
+              <strong>Trip brief</strong>
+            </div>
+            <small>Always visible</small>
+          </div>
+          <p className="drawer-note">{trip?.notes || "No trip notes yet. Add notes from the Trips page to keep context with this plan."}</p>
+        </article>
       </section>
 
-      <div className="workspace-grid">
+      <div className="trip-detail-layout">
+        <section className="panel itinerary-panel">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Timeline</p>
+              <h2>Daily itinerary</h2>
+            </div>
+            <span className="countdown-pill">{days.length} days</span>
+          </div>
+          <div className="day-tabs" aria-label="Itinerary day tabs">
+            <button type="button" className={!activeDay ? "is-active" : ""} onClick={() => setActiveDay(null)}>All days</button>
+            {days.map((day) => (
+              <button
+                type="button"
+                className={activeDay === day.day_number ? "is-active" : ""}
+                key={day.id || day.day_number}
+                onClick={() => setActiveDay(day.day_number)}
+              >
+                Day {day.day_number}
+              </button>
+            ))}
+          </div>
+          <div className="day-board">
+            {!days.length ? (
+              <div className="empty-state">
+                <strong>No itinerary yet. Add your first day.</strong>
+                <p>Start with a day, then add places, reminders, and family notes.</p>
+              </div>
+            ) : null}
+            {(visibleDays.length ? visibleDays : []).map((day) => (
+              <article className="day-card" key={day.id || day.day_number}>
+                <div className="day-card__header">
+                  <div>
+                    <span className="stat-label">Day {day.day_number}</span>
+                    <h2>{day.title || `Day ${day.day_number}`}</h2>
+                  </div>
+                  <p className="day-date">{day.trip_date ? day.trip_date.slice(0, 10) : "Date not set"}</p>
+                </div>
+                {canEditTrip ? (
+                  <div className="inline-actions">
+                    <button type="button" className="link-button" onClick={() => editDay(day)}>Edit day</button>
+                    <button type="button" className="link-button" onClick={() => deleteDay(day)}>Delete day</button>
+                  </div>
+                ) : null}
+                {!(groupedActivities[day.day_number] || []).length ? (
+                  <div className="timeline-empty">
+                    <strong>No plan items yet</strong>
+                    <p>Add a place, reminder, note, or plan item to shape this day.</p>
+                  </div>
+                ) : null}
+                {(groupedActivities[day.day_number] || []).map((activity) => (
+                  <div className="activity-line" key={activity.id}>
+                    <div className="activity-line__time">
+                      {activity.planned_time ? activity.planned_time.slice(0, 5) : "Anytime"}
+                    </div>
+                    <div className="activity-line__content">
+                      <span>{activity.type}</span>
+                      <strong>{activity.title}</strong>
+                      <p>{activity.notes}</p>
+                      {(user?.role === "admin" || user?.id === activity.created_by) ? (
+                        <div className="inline-actions">
+                          <button type="button" className="link-button" onClick={() => editActivity(activity)}>Edit</button>
+                          <button type="button" className="link-button" onClick={() => deleteActivity(activity)}>Delete</button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <aside className="trip-map-sidebar">
+          <section className="panel map-preview-card sticky-map">
+            <p className="eyebrow">Route map</p>
+            <h2>{trip?.destination || "Destination map"}</h2>
+            <div className="live-map-frame">
+              <iframe
+                title={`${trip?.destination || "Trip destination"} map`}
+                src={mapUrl}
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+                allowFullScreen
+              ></iframe>
+            </div>
+            <div className="route-list">
+              {(days.length ? days.slice(0, 4) : [{ day_number: 1, title: "Add your first stop" }]).map((day) => (
+                <span key={day.id || day.day_number}>Day {day.day_number}: {day.title || "Open plan"}</span>
+              ))}
+            </div>
+            <a className="btn btn--primary" href={mapLink} target="_blank" rel="noreferrer">Open full map</a>
+          </section>
+        </aside>
+      </div>
+
+      <div className="workspace-grid planner-forms-grid">
         <div className="panel form-grid">
           <h2 id="add-day">{editingDayId ? "Edit trip day" : "Add trip day"}</h2>
           <form className="form-grid" onSubmit={saveDay}>
@@ -349,54 +534,15 @@ function TripDetail() {
           </form>
         </div>
 
-        <section className="panel day-board">
-          {!days.length ? (
-            <div className="empty-state">
-              <strong>No itinerary yet. Add your first day.</strong>
-              <p>Start with a day, then add places, reminders, and family notes.</p>
-            </div>
-          ) : null}
-          {(days.length ? days : []).map((day) => (
-            <article className="day-card" key={day.id || day.day_number}>
-              <div className="day-card__header">
-                <div>
-                  <span className="stat-label">Day {day.day_number}</span>
-                  <h2>{day.title || `Day ${day.day_number}`}</h2>
-                </div>
-                <p className="day-date">{day.trip_date ? day.trip_date.slice(0, 10) : "Date not set"}</p>
-              </div>
-              {canEditTrip ? (
-                <div className="inline-actions">
-                  <button type="button" className="link-button" onClick={() => editDay(day)}>Edit day</button>
-                  <button type="button" className="link-button" onClick={() => deleteDay(day)}>Delete day</button>
-                </div>
-              ) : null}
-              {!(groupedActivities[day.day_number] || []).length ? (
-                <div className="timeline-empty">
-                  <strong>No plan items yet</strong>
-                  <p>Add a place, reminder, note, or plan item to shape this day.</p>
-                </div>
-              ) : null}
-              {(groupedActivities[day.day_number] || []).map((activity) => (
-                <div className="activity-line" key={activity.id}>
-                  <div className="activity-line__time">
-                    {activity.planned_time ? activity.planned_time.slice(0, 5) : "Anytime"}
-                  </div>
-                  <div className="activity-line__content">
-                    <span>{activity.type}</span>
-                    <strong>{activity.title}</strong>
-                    <p>{activity.notes}</p>
-                    {(user?.role === "admin" || user?.id === activity.created_by) ? (
-                      <div className="inline-actions">
-                        <button type="button" className="link-button" onClick={() => editActivity(activity)}>Edit</button>
-                        <button type="button" className="link-button" onClick={() => deleteActivity(activity)}>Delete</button>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </article>
-          ))}
+        <section className="panel planning-notes-card">
+          <p className="eyebrow">Planner notes</p>
+          <h2>Keep the details moving.</h2>
+          <p className="text-muted">Use the forms beside this note to add days and plan items. The timeline above updates from the same saved itinerary data.</p>
+          <div className="quick-link-list">
+            <a href="#add-day">Add day <span>Date and title</span></a>
+            <a href="#add-activity">Add activity <span>Time, type, notes</span></a>
+            <Link to="/memories">Add memory <span>Trip journal</span></Link>
+          </div>
         </section>
       </div>
     </AppShell>

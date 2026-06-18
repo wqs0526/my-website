@@ -8,13 +8,29 @@ const db = require("./src/db");
 const app = express();
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
-const ADMIN_EMAIL = "wqs040526@gmail.com";
+const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
+const CLIENT_URL = process.env.CLIENT_URL || process.env.CORS_ORIGIN || "";
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  ...CLIENT_URL.split(",").map((origin) => origin.trim()).filter(Boolean),
+];
 
 if (!JWT_SECRET) {
   throw new Error("JWT_SECRET is required in .env");
 }
 
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("Not allowed by CORS"));
+    },
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 function createToken(user) {
@@ -83,6 +99,22 @@ function requireAdmin(req, res, next) {
 
 function canManage(req, ownerId) {
   return req.user.role === "admin" || Number(req.user.id) === Number(ownerId);
+}
+
+function normalizeMemberIds(memberIds) {
+  if (!Array.isArray(memberIds)) return [];
+  return [...new Set(memberIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
+}
+
+async function syncMemoryMembers(memoryId, memberIds, addedBy) {
+  await db.execute("DELETE FROM memory_members WHERE memory_id = ?", [memoryId]);
+
+  for (const userId of normalizeMemberIds(memberIds)) {
+    await db.execute(
+      "INSERT IGNORE INTO memory_members (memory_id, user_id, added_by) VALUES (?, ?, ?)",
+      [memoryId, userId, addedBy || null]
+    );
+  }
 }
 
 async function loadTrip(req, res, next) {
@@ -210,6 +242,13 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   return res.json({ user: getPublicUser(req.user) });
 });
 
+app.get("/api/users", authenticate, async (req, res) => {
+  const [users] = await db.execute(
+    "SELECT id, full_name, email, role FROM users ORDER BY full_name ASC, email ASC"
+  );
+  return res.json({ users });
+});
+
 app.get("/api/dashboard", authenticate, async (req, res) => {
   const [[tripStats], [memoryStats], [activityStats], [completedStats], [upcomingStats]] = await Promise.all([
     db.execute("SELECT COUNT(*) AS count FROM trips"),
@@ -254,7 +293,8 @@ app.get("/api/profile/stats", authenticate, async (req, res) => {
 app.get("/api/trips", authenticate, async (req, res) => {
   const [trips] = await db.execute(
     `SELECT trips.*, users.full_name AS creator_name,
-      (SELECT COUNT(*) FROM trip_activities WHERE trip_activities.trip_id = trips.id) AS activity_count
+      (SELECT COUNT(*) FROM trip_activities WHERE trip_activities.trip_id = trips.id) AS activity_count,
+      (SELECT COUNT(*) FROM trip_members WHERE trip_members.trip_id = trips.id) AS member_count
      FROM trips
      LEFT JOIN users ON users.id = trips.created_by
      ORDER BY COALESCE(trips.start_date, trips.created_at) DESC`
@@ -275,13 +315,18 @@ app.post("/api/trips", authenticate, async (req, res) => {
      VALUES (?, ?, ?, ?, ?, ?)`,
     [title.trim(), destination.trim(), startDate || null, endDate || null, notes || null, req.user.id]
   );
+  await db.execute("INSERT IGNORE INTO trip_members (trip_id, user_id, added_by) VALUES (?, ?, ?)", [
+    result.insertId,
+    req.user.id,
+    req.user.id,
+  ]);
 
   await logAction(req.user.id, "trip_created", title);
   return res.status(201).json({ id: result.insertId });
 });
 
 app.get("/api/trips/:id", authenticate, loadTrip, async (req, res) => {
-  const [[days], [activities], [packingItems], [expenses]] = await Promise.all([
+  const [[days], [activities], [packingItems], [expenses], [members], [availableUsers]] = await Promise.all([
     db.execute("SELECT * FROM trip_days WHERE trip_id = ? ORDER BY day_number ASC", [
       req.trip.id,
     ]),
@@ -299,9 +344,55 @@ app.get("/api/trips/:id", authenticate, loadTrip, async (req, res) => {
     db.execute("SELECT * FROM trip_expenses WHERE trip_id = ? ORDER BY created_at DESC", [
       req.trip.id,
     ]),
+    db.execute(
+      `SELECT users.id, users.full_name, users.email, users.role, trip_members.created_at
+       FROM trip_members
+       JOIN users ON users.id = trip_members.user_id
+       WHERE trip_members.trip_id = ?
+       ORDER BY users.full_name ASC`,
+      [req.trip.id]
+    ),
+    db.execute("SELECT id, full_name, email, role FROM users ORDER BY full_name ASC, email ASC"),
   ]);
 
-  return res.json({ trip: req.trip, days, activities, packingItems, expenses });
+  return res.json({ trip: req.trip, days, activities, packingItems, expenses, members, availableUsers });
+});
+
+app.post("/api/trips/:id/members", authenticate, loadTrip, async (req, res) => {
+  if (!canManage(req, req.trip.created_by)) {
+    return res.status(403).json({ message: "You can only add members to trips you created." });
+  }
+
+  const userId = Number(req.body.userId);
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Please choose a valid member." });
+  }
+
+  const [users] = await db.execute("SELECT id FROM users WHERE id = ? LIMIT 1", [userId]);
+  if (!users[0]) {
+    return res.status(404).json({ message: "Member was not found." });
+  }
+
+  await db.execute("INSERT IGNORE INTO trip_members (trip_id, user_id, added_by) VALUES (?, ?, ?)", [
+    req.trip.id,
+    userId,
+    req.user.id,
+  ]);
+  await logAction(req.user.id, "trip_member_added", `${req.trip.title}: user ${userId}`);
+  return res.status(201).json({ message: "Member added to trip." });
+});
+
+app.delete("/api/trips/:id/members/:userId", authenticate, loadTrip, async (req, res) => {
+  if (!canManage(req, req.trip.created_by)) {
+    return res.status(403).json({ message: "You can only remove members from trips you created." });
+  }
+
+  await db.execute("DELETE FROM trip_members WHERE trip_id = ? AND user_id = ?", [
+    req.trip.id,
+    req.params.userId,
+  ]);
+  await logAction(req.user.id, "trip_member_removed", `${req.trip.title}: user ${req.params.userId}`);
+  return res.json({ message: "Member removed from trip." });
 });
 
 app.put("/api/trips/:id", authenticate, loadTrip, async (req, res) => {
@@ -602,11 +693,33 @@ app.get("/api/memories", authenticate, async (req, res) => {
     [req.user.id, req.user.id, req.user.id, req.user.id]
   );
 
+  if (memories.length) {
+    const memoryIds = memories.map((memory) => memory.id);
+    const placeholders = memoryIds.map(() => "?").join(",");
+    const [members] = await db.execute(
+      `SELECT memory_members.memory_id, users.id, users.full_name, users.email, users.role
+       FROM memory_members
+       JOIN users ON users.id = memory_members.user_id
+       WHERE memory_members.memory_id IN (${placeholders})
+       ORDER BY users.full_name ASC`,
+      memoryIds
+    );
+    const membersByMemory = members.reduce((groups, member) => {
+      groups[member.memory_id] = groups[member.memory_id] || [];
+      groups[member.memory_id].push(member);
+      return groups;
+    }, {});
+
+    memories.forEach((memory) => {
+      memory.members = membersByMemory[memory.id] || [];
+    });
+  }
+
   return res.json({ memories });
 });
 
 app.post("/api/memories", authenticate, async (req, res) => {
-  const { tripId, title, story, mediaUrl, mediaReference, mediaType, memoryDate } = req.body;
+  const { tripId, title, story, mediaUrl, mediaReference, mediaType, memoryDate, memberIds } = req.body;
 
   if (!title) {
     return res.status(400).json({ message: "Memory title is required." });
@@ -627,6 +740,7 @@ app.post("/api/memories", authenticate, async (req, res) => {
       req.user.id,
     ]
   );
+  await syncMemoryMembers(result.insertId, memberIds, req.user.id);
 
   await logAction(req.user.id, "memory_created", title);
   return res.status(201).json({ id: result.insertId });
@@ -637,7 +751,7 @@ app.put("/api/memories/:id", authenticate, loadMemory, async (req, res) => {
     return res.status(403).json({ message: "You can only edit memories you created." });
   }
 
-  const { tripId, title, story, mediaUrl, mediaReference, mediaType, memoryDate } = req.body;
+  const { tripId, title, story, mediaUrl, mediaReference, mediaType, memoryDate, memberIds } = req.body;
   await db.execute(
     `UPDATE memories
      SET trip_id = ?, title = ?, story = ?, media_url = ?, media_reference = ?,
@@ -654,6 +768,7 @@ app.put("/api/memories/:id", authenticate, loadMemory, async (req, res) => {
       req.memory.id,
     ]
   );
+  await syncMemoryMembers(req.memory.id, memberIds, req.user.id);
 
   await logAction(req.user.id, "memory_updated", title);
   return res.json({ message: "Memory updated." });

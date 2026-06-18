@@ -18,11 +18,11 @@ function AppShell({ children, user }) {
         </NavLink>
 
         <nav className="app-nav">
-          <NavLink to="/dashboard">Dashboard</NavLink>
-          <NavLink to="/trips">Trips</NavLink>
-          <NavLink to="/memories">Memories</NavLink>
-          <NavLink to="/profile">Profile</NavLink>
-          {user?.role === "admin" ? <NavLink to="/admin">Admin</NavLink> : null}
+          <NavLink to="/dashboard"><span>D</span>Dashboard</NavLink>
+          <NavLink to="/trips"><span>T</span>Trips</NavLink>
+          <NavLink to="/memories"><span>M</span>Memories</NavLink>
+          <NavLink to="/profile"><span>P</span>Profile</NavLink>
+          {user?.role === "admin" ? <NavLink to="/admin"><span>A</span>Admin</NavLink> : null}
         </nav>
 
         <div className="app-user">

@@ -15,6 +15,7 @@ function Trips() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [filter, setFilter] = useState("all");
 
   const loadTrips = async () => {
     setIsLoading(true);
@@ -75,16 +76,72 @@ function Trips() {
     await loadTrips();
   };
 
+  const featuredTrips = trips.slice(0, 3);
+  const filteredTrips = trips.filter((trip) => {
+    const status = getTripStatus(trip);
+    if (filter === "upcoming") return status.tone === "upcoming" || status.tone === "active";
+    if (filter === "past") return status.tone === "completed";
+    if (filter === "draft") return status.tone === "planning";
+    if (filter === "shared") return true;
+    return true;
+  });
+  const featuredTrip = featuredTrips[0];
+  const upcomingTrips = trips.filter((trip) => getTripStatus(trip).tone !== "completed");
+  const tripsMapQuery = encodeURIComponent(featuredTrip?.destination || trips[0]?.destination || "Singapore");
+  const tripsMapUrl = `https://www.google.com/maps?q=${tripsMapQuery}&output=embed`;
+  const tripsMapLink = `https://www.google.com/maps/search/?api=1&query=${tripsMapQuery}`;
+
   return (
     <AppShell user={user}>
-      <section className="app-header">
-        <p className="eyebrow">Trip board</p>
-        <h1>Plan the family trips day by day.</h1>
-        <p>Create trip boards, keep dates visible, and open each itinerary when the details matter.</p>
+      <section className="travel-hero trips-hero reveal">
+        <div className="travel-hero__copy">
+          <p className="eyebrow">Trip board</p>
+          <h1>{featuredTrip ? featuredTrip.title : "Plan the family trips day by day."}</h1>
+          <p>{featuredTrip ? `${featuredTrip.destination} anchors your trip library. Open it, adjust the route, or add another destination.` : "Create trip boards, keep dates visible, and open each itinerary when the details matter."}</p>
+          {featuredTrip ? <Link to={`/trips/${featuredTrip.id}`} className="btn btn--primary">Open featured trip</Link> : null}
+        </div>
+        <div className="map-preview-card">
+          <span className="map-pin">Map preview</span>
+          <div className="live-map-frame live-map-frame--hero">
+            <iframe
+              title="Trips map preview"
+              src={tripsMapUrl}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            ></iframe>
+          </div>
+          <a className="btn btn--secondary" href={tripsMapLink} target="_blank" rel="noreferrer">Open map</a>
+        </div>
       </section>
 
-      <div className="workspace-grid">
-        <form className="panel form-grid" onSubmit={saveTrip}>
+      {featuredTrips.length ? (
+        <section className="featured-carousel destination-rail reveal">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Destination rail</p>
+              <h2>Browse like a trip library</h2>
+            </div>
+          </div>
+          <div className="featured-trip-row">
+            {featuredTrips.map((trip, index) => {
+              const status = getTripStatus(trip);
+
+              return (
+                <Link to={`/trips/${trip.id}`} className={`feature-destination image-card image-card--${index % 4}`} key={trip.id}>
+                  <span className={`trip-status trip-status--${status.tone}`}>{status.label}</span>
+                  <h3>{trip.title}</h3>
+                  <p>{trip.destination}</p>
+                  <small>{formatTripDateRange(trip.start_date, trip.end_date)}</small>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+      <div className="workspace-grid trips-workspace">
+        <form className="panel form-grid sticky-planner" onSubmit={saveTrip}>
           <h2>{editingId ? "Edit trip" : "Create trip"}</h2>
           {message ? <p className="auth-alert">{message}</p> : null}
           <input placeholder="Trip title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
@@ -100,8 +157,25 @@ function Trips() {
           </div>
         </form>
 
-        <section className="panel list-panel">
-          <h2>Family trips</h2>
+        <section className="panel list-panel trip-board-panel">
+          <div className="memory-panel-heading">
+            <div>
+              <p className="eyebrow">Library</p>
+              <h2>Trips by status</h2>
+            </div>
+            <div className="filter-chips" aria-label="Trip filters">
+              {["upcoming", "past", "shared", "draft"].map((item) => (
+                <button
+                  type="button"
+                  className={filter === item ? "is-active" : ""}
+                  key={item}
+                  onClick={() => setFilter(item)}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          </div>
           {message ? <p className="auth-alert">{message}</p> : null}
           {isLoading ? (
             <div className="trip-grid">
@@ -115,12 +189,36 @@ function Trips() {
               <p>Add a destination on the left and turn it into a family itinerary.</p>
             </div>
           ) : null}
-          {!isLoading ? <div className="trip-grid">
-            {trips.map((trip) => {
+          {!isLoading && trips.length && !filteredTrips.length ? (
+            <div className="empty-state">
+              <strong>No trips match this filter.</strong>
+              <p>Try a different status chip or create a new trip.</p>
+            </div>
+          ) : null}
+          {!isLoading ? <div className="trip-library-layout">
+            <div className="trip-timeline-list">
+              <p className="eyebrow">Upcoming timeline</p>
+              {(upcomingTrips.length ? upcomingTrips : filteredTrips).slice(0, 5).map((trip) => {
+                const status = getTripStatus(trip);
+
+                return (
+                  <Link to={`/trips/${trip.id}`} className="trip-timeline-row" key={trip.id}>
+                    <span></span>
+                    <div>
+                      <strong>{trip.title}</strong>
+                      <p>{trip.destination}</p>
+                    </div>
+                    <small>{status.countdown}</small>
+                  </Link>
+                );
+              })}
+            </div>
+            <div className="trip-destination-list">
+            {filteredTrips.map((trip, index) => {
               const status = getTripStatus(trip);
 
               return (
-                <article className="list-item ts-card destination-card trip-card" key={trip.id}>
+                <article className={`destination-poster image-card image-card--${index % 4}`} key={trip.id}>
                   <div className="trip-card__top">
                     <span className={`trip-status trip-status--${status.tone}`}>{status.label}</span>
                     <span className="countdown-pill">{status.countdown}</span>
@@ -147,6 +245,7 @@ function Trips() {
                 </article>
               );
             })}
+            </div>
           </div> : null}
         </section>
       </div>

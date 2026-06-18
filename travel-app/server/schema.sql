@@ -48,6 +48,17 @@ CREATE TABLE IF NOT EXISTS trips (
   CONSTRAINT trips_created_by_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS trip_members (
+  trip_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  added_by INT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (trip_id, user_id),
+  CONSTRAINT trip_members_trip_fk FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE CASCADE,
+  CONSTRAINT trip_members_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT trip_members_added_by_fk FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
 CREATE TABLE IF NOT EXISTS trip_days (
   id INT UNSIGNED NOT NULL AUTO_INCREMENT,
   trip_id INT UNSIGNED NOT NULL,
@@ -119,6 +130,17 @@ CREATE TABLE IF NOT EXISTS memories (
   PRIMARY KEY (id),
   CONSTRAINT memories_trip_fk FOREIGN KEY (trip_id) REFERENCES trips(id) ON DELETE SET NULL,
   CONSTRAINT memories_created_by_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS memory_members (
+  memory_id INT UNSIGNED NOT NULL,
+  user_id INT UNSIGNED NOT NULL,
+  added_by INT UNSIGNED NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (memory_id, user_id),
+  CONSTRAINT memory_members_memory_fk FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE,
+  CONSTRAINT memory_members_user_fk FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT memory_members_added_by_fk FOREIGN KEY (added_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
 CREATE TABLE IF NOT EXISTS memory_reactions (
