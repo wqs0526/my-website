@@ -15,7 +15,8 @@ function Trips() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState("upcoming");
+  const [selectedTripId, setSelectedTripId] = useState(null);
 
   const loadTrips = async () => {
     setIsLoading(true);
@@ -86,7 +87,7 @@ function Trips() {
     return true;
   });
   const featuredTrip = featuredTrips[0];
-  const upcomingTrips = trips.filter((trip) => getTripStatus(trip).tone !== "completed");
+  const selectedTrip = filteredTrips.find((trip) => trip.id === selectedTripId) || filteredTrips[0];
   const tripsMapQuery = encodeURIComponent(featuredTrip?.destination || trips[0]?.destination || "Singapore");
   const tripsMapUrl = `https://www.google.com/maps?q=${tripsMapQuery}&output=embed`;
   const tripsMapLink = `https://www.google.com/maps/search/?api=1&query=${tripsMapQuery}`;
@@ -163,13 +164,13 @@ function Trips() {
               <p className="eyebrow">Library</p>
               <h2>Trips by status</h2>
             </div>
-            <div className="filter-chips" aria-label="Trip filters">
+            <div className="filter-chips trip-status-filters" aria-label="Trip filters">
               {["upcoming", "past", "shared", "draft"].map((item) => (
                 <button
                   type="button"
                   className={filter === item ? "is-active" : ""}
                   key={item}
-                  onClick={() => setFilter(item)}
+                  onClick={() => { setFilter(item); setSelectedTripId(null); }}
                 >
                   {item}
                 </button>
@@ -195,56 +196,60 @@ function Trips() {
               <p>Try a different status chip or create a new trip.</p>
             </div>
           ) : null}
-          {!isLoading ? <div className="trip-library-layout">
+          {!isLoading && filteredTrips.length ? <div className="trip-library-layout">
             <div className="trip-timeline-list">
-              <p className="eyebrow">Upcoming timeline</p>
-              {(upcomingTrips.length ? upcomingTrips : filteredTrips).slice(0, 5).map((trip) => {
+              <div className="trip-timeline-list__heading">
+                <span>{filter} trips</span>
+                <small>{filteredTrips.length} {filteredTrips.length === 1 ? "trip" : "trips"}</small>
+              </div>
+              {filteredTrips.map((trip) => {
                 const status = getTripStatus(trip);
 
                 return (
-                  <Link to={`/trips/${trip.id}`} className="trip-timeline-row" key={trip.id}>
-                    <span></span>
+                  <button type="button" className={`trip-timeline-row ${selectedTrip?.id === trip.id ? "is-selected" : ""}`} key={trip.id} onClick={() => setSelectedTripId(trip.id)}>
+                    <span aria-hidden="true"></span>
                     <div>
                       <strong>{trip.title}</strong>
-                      <p>{trip.destination}</p>
+                      <p>{status.countdown}</p>
+                      <small>{formatTripDateRange(trip.start_date, trip.end_date)}</small>
                     </div>
-                    <small>{status.countdown}</small>
-                  </Link>
+                    <span className="trip-timeline-row__arrow" aria-hidden="true">›</span>
+                  </button>
                 );
               })}
             </div>
-            <div className="trip-destination-list">
-            {filteredTrips.map((trip, index) => {
-              const status = getTripStatus(trip);
+            <div className="trip-destination-preview">
+            {selectedTrip ? (() => {
+              const status = getTripStatus(selectedTrip);
 
               return (
-                <article className={`destination-poster image-card image-card--${index % 4}`} key={trip.id}>
+                <article className="destination-poster trip-featured-preview image-card image-card--1" key={selectedTrip.id}>
                   <div className="trip-card__top">
                     <span className={`trip-status trip-status--${status.tone}`}>{status.label}</span>
                     <span className="countdown-pill">{status.countdown}</span>
                   </div>
                   <div className="trip-card__body">
                     <span className="stat-label">Destination</span>
-                    <h3>{trip.title}</h3>
-                    <p className="trip-card__destination">{trip.destination}</p>
-                    <p className="trip-card__dates">{formatTripDateRange(trip.start_date, trip.end_date)}</p>
+                    <h3>{selectedTrip.title}</h3>
+                    <p className="trip-card__destination">{selectedTrip.destination}</p>
+                    <p className="trip-card__dates">{formatTripDateRange(selectedTrip.start_date, selectedTrip.end_date)}</p>
                   </div>
                   <div className="trip-card__meta">
-                    <span>{trip.activity_count} plan items</span>
-                    <span>Created by {trip.creator_name || "Unknown"}</span>
+                    <span>{selectedTrip.activity_count} plan items</span>
+                    <span>Created by {selectedTrip.creator_name || "Unknown"}</span>
                   </div>
                   <div className="trip-card-footer">
-                    <Link to={`/trips/${trip.id}`} className="btn btn--primary">Open itinerary</Link>
-                    {(user?.role === "admin" || user?.id === trip.created_by) ? (
+                    <Link to={`/trips/${selectedTrip.id}`} className="btn btn--primary">Open itinerary</Link>
+                    {(user?.role === "admin" || user?.id === selectedTrip.created_by) ? (
                       <div className="inline-actions">
-                        <button type="button" className="btn btn--secondary" onClick={() => startEdit(trip)}>Edit</button>
-                        <button type="button" className="btn btn--secondary" onClick={() => deleteTrip(trip)}>Delete</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => startEdit(selectedTrip)}>Edit</button>
+                        <button type="button" className="btn btn--secondary" onClick={() => deleteTrip(selectedTrip)}>Delete</button>
                       </div>
                     ) : null}
                   </div>
                 </article>
               );
-            })}
+            })() : null}
             </div>
           </div> : null}
         </section>

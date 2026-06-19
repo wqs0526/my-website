@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../api";
 import AppShell from "../components/AppShell";
@@ -14,6 +14,9 @@ const blankMemory = {
   memoryDate: "",
   memberIds: [],
 };
+
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
 
 const reactions = [
   { key: "love", label: "Love", icon: "L", countKey: "love_count", reactedKey: "reacted_love" },
@@ -76,23 +79,36 @@ function Memories() {
   const [form, setForm] = useState(blankMemory);
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
+  const [fileInputKey, setFileInputKey] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const loadData = () => {
-    Promise.all([
-      apiRequest("/api/memories"),
-      apiRequest("/api/trips"),
-      apiRequest("/api/users").catch(() => ({ users: [] })),
-    ])
-      .then(([memoryData, tripData, userData]) => {
-        setMemories(memoryData.memories);
-        setTrips(tripData.trips);
-        setUsers(userData.users || []);
-        setMessage("");
-      })
-      .catch((error) => setMessage(error.message));
-  };
+  const loadData = useCallback(async () => {
+    try {
+      const [memoryData, tripData, userData] = await Promise.all([
+        apiRequest("/api/memories"),
+        apiRequest("/api/trips"),
+        apiRequest("/api/users").catch(() => ({ users: [] })),
+      ]);
+      setMemories(memoryData.memories);
+      setTrips(tripData.trips);
+      setUsers(userData.users || []);
+      setMessage("");
+    } catch (error) {
+      setMessage(error.message);
+    }
+  }, []);
 
-  useEffect(loadData, []);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
+    };
+  }, [mediaPreviewUrl]);
 
   const groupedMemories = useMemo(() => {
     const tripGroups = memories.reduce((groups, memory) => {
@@ -117,16 +133,97 @@ function Memories() {
     }));
   }, [memories]);
 
-  const saveMemory = async (event) => {
-    event.preventDefault();
-    const path = editingId ? `/api/memories/${editingId}` : "/api/memories";
-    await apiRequest(path, { method: editingId ? "PUT" : "POST", body: JSON.stringify(form) });
+  const resetMemoryForm = () => {
     setForm(blankMemory);
     setEditingId(null);
-    loadData();
+    setMediaFile(null);
+    setMediaPreviewUrl("");
+    setFileInputKey((key) => key + 1);
+  };
+
+  const handleMediaFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      setMediaFile(null);
+      setMediaPreviewUrl("");
+      return;
+    }
+
+    const isImage = file.type.startsWith("image/");
+    const isVideo = file.type.startsWith("video/");
+
+    if (!isImage && !isVideo) {
+      setMessage("Choose an image or video file.");
+      setMediaFile(null);
+      setMediaPreviewUrl("");
+      event.target.value = "";
+      return;
+    }
+
+    if (isImage && file.size > MAX_IMAGE_SIZE) {
+      setMessage("Images must be 10MB or smaller.");
+      setMediaFile(null);
+      setMediaPreviewUrl("");
+      event.target.value = "";
+      return;
+    }
+
+    if (isVideo && file.size > MAX_VIDEO_SIZE) {
+      setMessage("Videos must be 50MB or smaller.");
+      setMediaFile(null);
+      setMediaPreviewUrl("");
+      event.target.value = "";
+      return;
+    }
+
+    setMessage("");
+    setMediaFile(file);
+    setMediaPreviewUrl(URL.createObjectURL(file));
+    setForm((current) => ({ ...current, mediaType: isVideo ? "video" : "photo" }));
+  };
+
+  const saveMemory = async (event) => {
+    event.preventDefault();
+    setMessage("");
+
+    if (!form.title.trim()) {
+      setMessage("Memory title is required.");
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      let memoryPayload = { ...form };
+
+      if (mediaFile) {
+        const uploadBody = new FormData();
+        uploadBody.append("media", mediaFile);
+        const uploadedMedia = await apiRequest("/api/uploads/memory-media", {
+          method: "POST",
+          body: uploadBody,
+        });
+        memoryPayload = { ...memoryPayload, ...uploadedMedia };
+      }
+
+      const path = editingId ? `/api/memories/${editingId}` : "/api/memories";
+      await apiRequest(path, {
+        method: editingId ? "PUT" : "POST",
+        body: JSON.stringify(memoryPayload),
+      });
+      resetMemoryForm();
+      await loadData();
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const editMemory = (memory) => {
+    setMediaFile(null);
+    setMediaPreviewUrl("");
+    setFileInputKey((key) => key + 1);
     setEditingId(memory.id);
     setForm({
       tripId: memory.trip_id || "",
@@ -155,6 +252,11 @@ function Memories() {
     loadData();
   };
 
+  const selectedMediaType = mediaFile
+    ? mediaFile.type.startsWith("video/") ? "video" : "photo"
+    : form.mediaType;
+  const selectedMediaPreview = mediaPreviewUrl || form.mediaUrl;
+
   return (
     <AppShell user={user}>
       <section className="app-header memory-hero travel-hero reveal">
@@ -172,11 +274,12 @@ function Memories() {
       <div className="workspace-grid memory-workspace">
         <form className="panel form-grid memory-form" onSubmit={saveMemory}>
           <h2>{editingId ? "Edit memory" : "Add memory"}</h2>
+          {message ? <p className="auth-alert">{message}</p> : null}
           <select value={form.tripId} onChange={(e) => setForm({ ...form, tripId: e.target.value })}>
             <option value="">No linked trip</option>
             {trips.map((trip) => <option value={trip.id} key={trip.id}>{trip.title}</option>)}
           </select>
-          <input placeholder="Memory title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <input required placeholder="Memory title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           <textarea placeholder="Story or note" value={form.story} onChange={(e) => setForm({ ...form, story: e.target.value })}></textarea>
           <select value={form.mediaType} onChange={(e) => setForm({ ...form, mediaType: e.target.value })}>
             <option value="photo">Photo</option>
@@ -185,6 +288,29 @@ function Memories() {
           </select>
           <input placeholder="Media URL" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} />
           <input placeholder="Filename or storage note" value={form.mediaReference} onChange={(e) => setForm({ ...form, mediaReference: e.target.value })} />
+          <label className="memory-upload-field">
+            <span>Upload a photo or video</span>
+            <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" onChange={handleMediaFile} />
+            <small>Images up to 10MB. Videos up to 50MB. A selected file takes priority over the URL above.</small>
+          </label>
+          {selectedMediaPreview ? (
+            <div className="memory-upload-preview">
+              {selectedMediaType === "video" ? (
+                <video src={selectedMediaPreview} controls preload="metadata">Preview unavailable.</video>
+              ) : (
+                <img src={selectedMediaPreview} alt="Selected memory preview" />
+              )}
+              <div>
+                <strong>{mediaFile?.name || form.mediaReference || "Media preview"}</strong>
+                <button type="button" className="link-button" onClick={() => {
+                  setMediaFile(null);
+                  setMediaPreviewUrl("");
+                  setFileInputKey((key) => key + 1);
+                  if (!mediaFile) setForm((current) => ({ ...current, mediaUrl: "", mediaReference: "" }));
+                }}>{mediaFile ? "Remove selected file" : "Clear media URL"}</button>
+              </div>
+            </div>
+          ) : null}
           <input type="date" value={form.memoryDate} onChange={(e) => setForm({ ...form, memoryDate: e.target.value })} />
           <label className="member-select-field">
             <span>People in this memory</span>
@@ -198,10 +324,9 @@ function Memories() {
               ))}
             </select>
           </label>
-          <div className="upload-placeholder">Future photo/video upload space</div>
           <div className="inline-actions">
-            <button type="submit" className="btn btn--primary">{editingId ? "Save memory" : "Add memory"}</button>
-            {editingId ? <button type="button" className="btn btn--secondary" onClick={() => { setEditingId(null); setForm(blankMemory); }}>Cancel</button> : null}
+            <button type="submit" className="btn btn--primary" disabled={isSaving}>{isSaving ? mediaFile ? "Uploading..." : "Saving..." : editingId ? "Save memory" : "Add memory"}</button>
+            {editingId ? <button type="button" className="btn btn--secondary" disabled={isSaving} onClick={resetMemoryForm}>Cancel</button> : null}
           </div>
         </form>
 
@@ -213,7 +338,6 @@ function Memories() {
             </div>
             <Link to="/trips" className="btn btn--secondary">View trips</Link>
           </div>
-          {message ? <p className="auth-alert">{message}</p> : null}
           {!memories.length && !message ? (
             <div className="empty-state">
               <strong>Capture your first family memory.</strong>

@@ -2,6 +2,8 @@ const express = require("express");
 const cors = require("cors");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const { v2: cloudinary } = require("cloudinary");
 require("dotenv").config();
 const db = require("./src/db");
 
@@ -10,6 +12,37 @@ const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAIL = String(process.env.ADMIN_EMAIL || "").trim().toLowerCase();
 const CLIENT_URL = process.env.CLIENT_URL || process.env.CORS_ORIGIN || "";
+const cloudinaryConfig = {
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+  secure: true,
+};
+const isCloudinaryConfigured = Boolean(
+  cloudinaryConfig.cloud_name && cloudinaryConfig.api_key && cloudinaryConfig.api_secret
+);
+
+if (isCloudinaryConfigured) {
+  cloudinary.config(cloudinaryConfig);
+}
+
+const memoryMediaUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 1,
+    fileSize: 50 * 1024 * 1024,
+  },
+  fileFilter(req, file, callback) {
+    const isImage = file.mimetype.startsWith("image/");
+    const isVideo = file.mimetype.startsWith("video/");
+
+    if (!isImage && !isVideo) {
+      return callback(new Error("Only image and video files are allowed."));
+    }
+
+    return callback(null, true);
+  },
+});
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
@@ -115,6 +148,43 @@ async function syncMemoryMembers(memoryId, memberIds, addedBy) {
       [memoryId, userId, addedBy || null]
     );
   }
+}
+
+function acceptMemoryMedia(req, res, next) {
+  memoryMediaUpload.single("media")(req, res, (error) => {
+    if (!error) return next();
+
+    if (error instanceof multer.MulterError) {
+      if (error.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({ message: "Videos must be 50MB or smaller. Images must be 10MB or smaller." });
+      }
+
+      return res.status(400).json({ message: `Upload failed: ${error.message}` });
+    }
+
+    return res.status(400).json({ message: error.message || "The selected file could not be uploaded." });
+  });
+}
+
+function uploadMemoryMediaToCloudinary(file) {
+  const resourceType = file.mimetype.startsWith("video/") ? "video" : "image";
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: "travel-app/memories",
+        resource_type: resourceType,
+        unique_filename: true,
+        overwrite: false,
+      },
+      (error, result) => {
+        if (error) return reject(error);
+        return resolve(result);
+      }
+    );
+
+    uploadStream.end(file.buffer);
+  });
 }
 
 async function loadTrip(req, res, next) {
@@ -721,6 +791,36 @@ app.delete("/api/expenses/:id", authenticate, async (req, res) => {
   await db.execute("DELETE FROM trip_expenses WHERE id = ?", [expense.id]);
   await logAction(req.user.id, "trip_expense_deleted", expense.category);
   return res.json({ message: "Expense deleted." });
+});
+
+app.post("/api/uploads/memory-media", authenticate, acceptMemoryMedia, async (req, res) => {
+  if (!isCloudinaryConfigured) {
+    return res.status(503).json({ message: "Media uploads are not configured on this server." });
+  }
+
+  if (!req.file) {
+    return res.status(400).json({ message: "Choose an image or video to upload." });
+  }
+
+  const isImage = req.file.mimetype.startsWith("image/");
+  if (isImage && req.file.size > 10 * 1024 * 1024) {
+    return res.status(413).json({ message: "Images must be 10MB or smaller." });
+  }
+
+  try {
+    const result = await uploadMemoryMediaToCloudinary(req.file);
+    const mediaType = isImage ? "photo" : "video";
+
+    await logAction(req.user.id, "memory_media_uploaded", result.public_id);
+    return res.status(201).json({
+      mediaUrl: result.secure_url,
+      mediaReference: result.public_id,
+      mediaType,
+    });
+  } catch (error) {
+    console.error("Cloudinary memory upload error:", error.message);
+    return res.status(502).json({ message: "The media upload service could not process this file." });
+  }
 });
 
 app.get("/api/memories", authenticate, async (req, res) => {
