@@ -31,7 +31,7 @@ function useCurrentUser() {
     };
   }, [navigate]);
 
-  return { user, isLoading };
+  return { user, setUser, isLoading };
 }
 
 export default useCurrentUser;

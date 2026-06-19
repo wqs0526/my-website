@@ -242,6 +242,54 @@ app.get("/api/auth/me", authenticate, async (req, res) => {
   return res.json({ user: getPublicUser(req.user) });
 });
 
+app.put("/api/profile", authenticate, async (req, res) => {
+  try {
+    const fullName = String(req.body.fullName || "").trim();
+    const email = String(req.body.email || "").trim().toLowerCase();
+    const phone = String(req.body.phone || "").trim();
+
+    if (!fullName || !email || !phone) {
+      return res.status(400).json({ message: "Full name, email, and phone are required." });
+    }
+
+    const [existingUsers] = await db.execute(
+      "SELECT id FROM users WHERE (email = ? OR phone = ?) AND id <> ? LIMIT 1",
+      [email, phone, req.user.id]
+    );
+
+    if (existingUsers.length > 0) {
+      return res.status(409).json({ message: "That email or phone number is already in use." });
+    }
+
+    await db.execute("UPDATE users SET full_name = ?, email = ?, phone = ? WHERE id = ?", [
+      fullName,
+      email,
+      phone,
+      req.user.id,
+    ]);
+
+    const [users] = await db.execute("SELECT * FROM users WHERE id = ? LIMIT 1", [req.user.id]);
+    await logAction(req.user.id, "profile_updated", email);
+
+    return res.json({ message: "Profile updated.", user: getPublicUser(users[0]) });
+  } catch (error) {
+    console.error("Profile update error:", error);
+    return res.status(500).json({ message: "Unable to update your profile right now." });
+  }
+});
+
+app.delete("/api/profile", authenticate, async (req, res) => {
+  try {
+    await logAction(req.user.id, "account_deleted", req.user.email);
+    await db.execute("DELETE FROM users WHERE id = ?", [req.user.id]);
+
+    return res.json({ message: "Your account has been deleted." });
+  } catch (error) {
+    console.error("Profile delete error:", error);
+    return res.status(500).json({ message: "Unable to delete your account right now." });
+  }
+});
+
 app.get("/api/users", authenticate, async (req, res) => {
   const [users] = await db.execute(
     "SELECT id, full_name, email, role FROM users ORDER BY full_name ASC, email ASC"

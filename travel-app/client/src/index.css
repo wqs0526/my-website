@@ -237,6 +237,17 @@ button:disabled {
   color: var(--ts-primary-dark);
 }
 
+.btn--danger {
+  background: var(--ts-danger);
+  box-shadow: 0 14px 28px rgba(185, 28, 28, 0.18);
+  color: #ffffff;
+}
+
+.btn--danger:hover {
+  background: #991b1b;
+  color: #ffffff;
+}
+
 .btn--large {
   min-height: 52px;
   padding-inline: 24px;
@@ -656,6 +667,12 @@ button:disabled {
   color: var(--ts-danger);
   line-height: 1.55;
   padding: 12px 14px;
+}
+
+.auth-alert--success {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+  color: var(--ts-success);
 }
 
 .auth-field {
@@ -1094,6 +1111,34 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.profile-edit-form {
+  border-bottom: 1px solid var(--ts-border);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+}
+
+.profile-edit-actions {
+  align-items: end;
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+}
+
+.account-danger-panel {
+  align-items: center;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+  margin-top: 22px;
+}
+
+.account-danger-panel p:not(.eyebrow) {
+  max-width: 760px;
+}
+
 .profile-item strong {
   display: block;
   margin-bottom: 6px;
@@ -1162,9 +1207,15 @@ button:disabled {
   .admin-grid,
   .memory-grid,
   .profile-grid,
+  .profile-edit-form,
   .quick-actions,
   .trip-grid {
     grid-template-columns: 1fr;
+  }
+
+  .account-danger-panel {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

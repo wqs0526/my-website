@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { apiRequest } from "../api";
+import { useNavigate } from "react-router-dom";
+import { apiRequest, clearToken } from "../api";
 import AppShell from "../components/AppShell";
 import useCurrentUser from "../hooks/useCurrentUser";
 
 function Profile() {
-  const { user } = useCurrentUser();
+  const navigate = useNavigate();
+  const { user, setUser } = useCurrentUser();
   const [stats, setStats] = useState({
     trips: 0,
     memories: 0,
@@ -12,12 +14,72 @@ function Profile() {
     completedTrips: 0,
     upcomingTrips: 0,
   });
+  const [form, setForm] = useState({ fullName: "", email: "", phone: "" });
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     apiRequest("/api/profile/stats")
       .then((data) => setStats(data.stats))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (user) {
+      setForm({
+        fullName: user.fullName || "",
+        email: user.email || "",
+        phone: user.phone || "",
+      });
+    }
+  }, [user]);
+
+  const updateField = (field, value) => {
+    setForm((current) => ({ ...current, [field]: value }));
+  };
+
+  const saveProfile = async (event) => {
+    event.preventDefault();
+    setError("");
+    setMessage("");
+    setIsSaving(true);
+
+    try {
+      const data = await apiRequest("/api/profile", {
+        method: "PUT",
+        body: JSON.stringify(form),
+      });
+      setUser(data.user);
+      setMessage(data.message || "Profile updated.");
+    } catch (requestError) {
+      setError(requestError.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    const confirmed = window.confirm(
+      "Delete your account? This cannot be undone, and you will be signed out."
+    );
+
+    if (!confirmed) return;
+
+    setError("");
+    setMessage("");
+    setIsDeleting(true);
+
+    try {
+      await apiRequest("/api/profile", { method: "DELETE" });
+      clearToken();
+      navigate("/", { replace: true });
+    } catch (requestError) {
+      setError(requestError.message);
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <AppShell user={user}>
@@ -67,6 +129,43 @@ function Profile() {
           </div>
           <span className="countdown-pill">{user?.role || "member"}</span>
         </div>
+
+        {message ? <p className="auth-alert auth-alert--success">{message}</p> : null}
+        {error ? <p className="auth-alert">{error}</p> : null}
+
+        <form className="profile-edit-form" onSubmit={saveProfile}>
+          <label className="auth-field">
+            <span>Full name</span>
+            <input
+              value={form.fullName}
+              onChange={(event) => updateField("fullName", event.target.value)}
+              required
+            />
+          </label>
+          <label className="auth-field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={form.email}
+              onChange={(event) => updateField("email", event.target.value)}
+              required
+            />
+          </label>
+          <label className="auth-field">
+            <span>Phone</span>
+            <input
+              value={form.phone}
+              onChange={(event) => updateField("phone", event.target.value)}
+              required
+            />
+          </label>
+          <div className="profile-edit-actions">
+            <button type="submit" className="btn btn--primary" disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save details"}
+            </button>
+          </div>
+        </form>
+
         <div className="profile-grid">
           <div className="profile-item">
             <strong>Email</strong>
@@ -85,6 +184,25 @@ function Profile() {
             <p>{user?.inviteCode}</p>
           </div>
         </div>
+      </section>
+
+      <section className="panel profile-panel account-danger-panel reveal">
+        <div>
+          <p className="eyebrow">Account control</p>
+          <h2>Delete account</h2>
+          <p>
+            This removes your sign-in account. Trips and memories that should remain
+            in the family space will keep their records without your user profile attached.
+          </p>
+        </div>
+        <button
+          type="button"
+          className="btn btn--danger"
+          onClick={deleteAccount}
+          disabled={isDeleting}
+        >
+          {isDeleting ? "Deleting..." : "Delete my account"}
+        </button>
       </section>
 
       <section className="achievement-grid passport-achievements reveal">
