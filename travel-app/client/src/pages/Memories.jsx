@@ -240,11 +240,14 @@ function Memories() {
 
       let uploadedMediaItems = [];
       if (selectedMediaFiles.length) {
-        const uploadFormData = new FormData();
-        selectedMediaFiles.forEach((item) => uploadFormData.append("media", item.file));
-        const uploadedMedia = await uploadMemoryMedia(uploadFormData);
-        uploadedMediaItems = uploadedMedia.mediaItems || [];
-        if (uploadedMediaItems.length !== selectedMediaFiles.length) {
+        const selectedFiles = selectedMediaFiles.map((item) => item.file);
+        const formData = new FormData();
+        selectedFiles.forEach((file) => {
+          formData.append("media", file);
+        });
+        const uploadResponse = await uploadMemoryMedia(formData);
+        uploadedMediaItems = uploadResponse.mediaItems || [];
+        if (uploadedMediaItems.length !== selectedFiles.length) {
           throw new Error("Not all media files finished uploading. Nothing was posted, so please try again.");
         }
         setPostingStage("posting");
@@ -256,6 +259,10 @@ function Memories() {
         mediaType: item.mediaType,
         sortOrder: index,
       }));
+      const primaryMediaItem = memoryPayload.mediaItems[0];
+      memoryPayload.mediaUrl = primaryMediaItem?.mediaUrl || "";
+      memoryPayload.mediaReference = primaryMediaItem?.mediaReference || "";
+      memoryPayload.mediaType = primaryMediaItem?.mediaType || "photo";
 
       const path = editingId ? `/api/memories/${editingId}` : "/api/memories";
       await apiRequest(path, {
