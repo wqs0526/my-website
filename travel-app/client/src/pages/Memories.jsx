@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { apiRequest } from "../api";
+import { apiRequest, uploadMemoryMedia } from "../api";
 import AppShell from "../components/AppShell";
 import useCurrentUser from "../hooks/useCurrentUser";
 
@@ -32,25 +32,29 @@ function formatMemoryDate(value) {
   return date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
 }
 
-function getMemoryDateKey(memory) {
-  return memory.memory_date ? memory.memory_date.slice(0, 10) : "undated";
+function getInitials(name) {
+  return (name || "Family member")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
+}
+
+function getFallbackTitle(story) {
+  const firstLine = story.trim().split(/\n|[.!?]/)[0].trim();
+  return firstLine.slice(0, 80) || "A family travel memory";
 }
 
 function MediaPreview({ memory }) {
   if (!memory.media_url) {
-    return (
-      <div className="media-placeholder memory-photo-placeholder">
-        <span className="pill">{memory.media_type}</span>
-        <strong>{memory.media_reference || "Family memory"}</strong>
-      </div>
-    );
+    return null;
   }
 
   if (memory.media_type === "photo") {
     return (
       <a className="memory-media-link" href={memory.media_url} target="_blank" rel="noreferrer">
         <img src={memory.media_url} alt={memory.title} />
-        <span className="memory-overlay-caption">{memory.title}</span>
       </a>
     );
   }
@@ -83,6 +87,9 @@ function Memories() {
   const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
   const [fileInputKey, setFileInputKey] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [messageType, setMessageType] = useState("error");
+  const [postingStage, setPostingStage] = useState("idle");
+  const [reactingKey, setReactingKey] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -96,6 +103,7 @@ function Memories() {
       setUsers(userData.users || []);
       setMessage("");
     } catch (error) {
+      setMessageType("error");
       setMessage(error.message);
     }
   }, []);
@@ -110,35 +118,24 @@ function Memories() {
     };
   }, [mediaPreviewUrl]);
 
-  const groupedMemories = useMemo(() => {
-    const tripGroups = memories.reduce((groups, memory) => {
-      const tripName = memory.trip_title || "General family memories";
-      const dateKey = getMemoryDateKey(memory);
-
-      groups[tripName] = groups[tripName] || {};
-      groups[tripName][dateKey] = groups[tripName][dateKey] || [];
-      groups[tripName][dateKey].push(memory);
-      return groups;
-    }, {});
-
-    return Object.entries(tripGroups).map(([tripName, dateGroups]) => ({
-      tripName,
-      dates: Object.entries(dateGroups)
-        .sort(([left], [right]) => {
-          if (left === "undated") return 1;
-          if (right === "undated") return -1;
-          return new Date(right) - new Date(left);
-        })
-        .map(([dateKey, items]) => ({ dateKey, items })),
-    }));
-  }, [memories]);
-
   const resetMemoryForm = () => {
     setForm(blankMemory);
     setEditingId(null);
     setMediaFile(null);
     setMediaPreviewUrl("");
     setFileInputKey((key) => key + 1);
+  };
+
+  const clearSelectedMedia = () => {
+    setMediaFile(null);
+    setMediaPreviewUrl("");
+    setFileInputKey((key) => key + 1);
+    setForm((current) => ({
+      ...current,
+      mediaUrl: "",
+      mediaReference: "",
+      mediaType: "photo",
+    }));
   };
 
   const handleMediaFile = (event) => {
@@ -153,6 +150,7 @@ function Memories() {
     const isVideo = file.type.startsWith("video/");
 
     if (!isImage && !isVideo) {
+      setMessageType("error");
       setMessage("Choose an image or video file.");
       setMediaFile(null);
       setMediaPreviewUrl("");
@@ -161,6 +159,7 @@ function Memories() {
     }
 
     if (isImage && file.size > MAX_IMAGE_SIZE) {
+      setMessageType("error");
       setMessage("Images must be 10MB or smaller.");
       setMediaFile(null);
       setMediaPreviewUrl("");
@@ -169,6 +168,7 @@ function Memories() {
     }
 
     if (isVideo && file.size > MAX_VIDEO_SIZE) {
+      setMessageType("error");
       setMessage("Videos must be 50MB or smaller.");
       setMediaFile(null);
       setMediaPreviewUrl("");
@@ -186,24 +186,26 @@ function Memories() {
     event.preventDefault();
     setMessage("");
 
-    if (!form.title.trim()) {
-      setMessage("Memory title is required.");
+    if (!form.story.trim()) {
+      setMessageType("error");
+      setMessage("Tell us a little about what happened on this trip.");
       return;
     }
 
     setIsSaving(true);
+    setPostingStage(mediaFile ? "uploading" : "posting");
 
     try {
-      let memoryPayload = { ...form };
+      let memoryPayload = {
+        ...form,
+        title: form.title.trim() || getFallbackTitle(form.story),
+        story: form.story.trim(),
+      };
 
       if (mediaFile) {
-        const uploadBody = new FormData();
-        uploadBody.append("media", mediaFile);
-        const uploadedMedia = await apiRequest("/api/uploads/memory-media", {
-          method: "POST",
-          body: uploadBody,
-        });
+        const uploadedMedia = await uploadMemoryMedia(mediaFile);
         memoryPayload = { ...memoryPayload, ...uploadedMedia };
+        setPostingStage("posting");
       }
 
       const path = editingId ? `/api/memories/${editingId}` : "/api/memories";
@@ -213,10 +215,14 @@ function Memories() {
       });
       resetMemoryForm();
       await loadData();
+      setMessageType("success");
+      setMessage(editingId ? "Your memory was updated." : "Your memory is now part of the family feed.");
     } catch (error) {
+      setMessageType("error");
       setMessage(error.message);
     } finally {
       setIsSaving(false);
+      setPostingStage("idle");
     }
   };
 
@@ -245,17 +251,27 @@ function Memories() {
 
   const reactToMemory = async (memory, reaction) => {
     if (memory[`reacted_${reaction}`]) return;
-    await apiRequest(`/api/memories/${memory.id}/reactions`, {
-      method: "POST",
-      body: JSON.stringify({ reaction }),
-    });
-    loadData();
+    const pendingKey = `${memory.id}-${reaction}`;
+    setReactingKey(pendingKey);
+    try {
+      await apiRequest(`/api/memories/${memory.id}/reactions`, {
+        method: "POST",
+        body: JSON.stringify({ reaction }),
+      });
+      await loadData();
+    } catch (error) {
+      setMessageType("error");
+      setMessage(`We couldn't save that reaction. ${error.message}`);
+    } finally {
+      setReactingKey("");
+    }
   };
 
   const selectedMediaType = mediaFile
     ? mediaFile.type.startsWith("video/") ? "video" : "photo"
     : form.mediaType;
   const selectedMediaPreview = mediaPreviewUrl || form.mediaUrl;
+  const displayName = user?.full_name || user?.name || user?.email?.split("@")[0] || "Family member";
 
   return (
     <AppShell user={user}>
@@ -272,27 +288,37 @@ function Memories() {
       </section>
 
       <div className="workspace-grid memory-workspace">
-        <form className="panel form-grid memory-form" onSubmit={saveMemory}>
-          <h2>{editingId ? "Edit memory" : "Add memory"}</h2>
-          {message ? <p className="auth-alert">{message}</p> : null}
-          <select value={form.tripId} onChange={(e) => setForm({ ...form, tripId: e.target.value })}>
-            <option value="">No linked trip</option>
-            {trips.map((trip) => <option value={trip.id} key={trip.id}>{trip.title}</option>)}
-          </select>
-          <input required placeholder="Memory title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-          <textarea placeholder="Story or note" value={form.story} onChange={(e) => setForm({ ...form, story: e.target.value })}></textarea>
-          <select value={form.mediaType} onChange={(e) => setForm({ ...form, mediaType: e.target.value })}>
-            <option value="photo">Photo</option>
-            <option value="video">Video</option>
-            <option value="other">Other</option>
-          </select>
-          <input placeholder="Media URL" value={form.mediaUrl} onChange={(e) => setForm({ ...form, mediaUrl: e.target.value })} />
-          <input placeholder="Filename or storage note" value={form.mediaReference} onChange={(e) => setForm({ ...form, mediaReference: e.target.value })} />
-          <label className="memory-upload-field">
-            <span>Upload a photo or video</span>
-            <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" onChange={handleMediaFile} />
-            <small>Images up to 10MB. Videos up to 50MB. A selected file takes priority over the URL above.</small>
+        <form className="panel memory-form memory-composer" onSubmit={saveMemory}>
+          <header className="memory-composer__header">
+            <span className="memory-composer__avatar" aria-hidden="true">{getInitials(displayName)}</span>
+            <div>
+              <h2>{editingId ? "Edit your memory" : "Share a memory"}</h2>
+              <p>Posting as {displayName}</p>
+            </div>
+          </header>
+          {message ? (
+            <div className={`composer-message composer-message--${messageType}`} role="status">
+              <span>{message}</span>
+              <button type="button" aria-label="Dismiss message" onClick={() => setMessage("")}>Close</button>
+            </div>
+          ) : null}
+
+          <label className="memory-story-field">
+            <span className="sr-only">Memory story</span>
+            <textarea
+              placeholder="What happened on this trip?"
+              value={form.story}
+              onChange={(e) => setForm({ ...form, story: e.target.value })}
+              aria-describedby="memory-story-help"
+            ></textarea>
+            <small id="memory-story-help">Share the little details your family will want to remember.</small>
           </label>
+
+          <label className="memory-title-field">
+            <span>Give this moment a title <small>Optional</small></span>
+            <input placeholder="e.g. Sunset in Santorini" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          </label>
+
           {selectedMediaPreview ? (
             <div className="memory-upload-preview">
               {selectedMediaType === "video" ? (
@@ -302,18 +328,37 @@ function Memories() {
               )}
               <div>
                 <strong>{mediaFile?.name || form.mediaReference || "Media preview"}</strong>
-                <button type="button" className="link-button" onClick={() => {
-                  setMediaFile(null);
-                  setMediaPreviewUrl("");
-                  setFileInputKey((key) => key + 1);
-                  if (!mediaFile) setForm((current) => ({ ...current, mediaUrl: "", mediaReference: "" }));
-                }}>{mediaFile ? "Remove selected file" : "Clear media URL"}</button>
+                <button type="button" className="memory-remove-media" onClick={clearSelectedMedia}>Remove</button>
               </div>
             </div>
           ) : null}
-          <input type="date" value={form.memoryDate} onChange={(e) => setForm({ ...form, memoryDate: e.target.value })} />
-          <label className="member-select-field">
-            <span>People in this memory</span>
+
+          {isSaving ? (
+            <div className="memory-post-progress" role="status" aria-live="polite">
+              <div className="memory-post-progress__label">
+                <strong>{postingStage === "uploading" ? "Uploading your media" : "Posting your memory"}</strong>
+                <span>Please keep this page open</span>
+              </div>
+              <div className="memory-post-progress__track" aria-hidden="true"><span></span></div>
+            </div>
+          ) : null}
+
+          <div className="memory-composer__details">
+            <label>
+              <span>Tag a trip</span>
+              <select value={form.tripId} onChange={(e) => setForm({ ...form, tripId: e.target.value })}>
+                <option value="">Choose a trip (optional)</option>
+                {trips.map((trip) => <option value={trip.id} key={trip.id}>{trip.title}</option>)}
+              </select>
+            </label>
+            <label>
+              <span>When did this happen?</span>
+              <input type="date" value={form.memoryDate} onChange={(e) => setForm({ ...form, memoryDate: e.target.value })} />
+            </label>
+          </div>
+
+          <details className="memory-family-picker">
+            <summary>Tag family members <span>Optional</span></summary>
             <select
               multiple
               value={form.memberIds}
@@ -323,90 +368,103 @@ function Memories() {
                 <option value={person.id} key={person.id}>{person.full_name} ({person.email})</option>
               ))}
             </select>
-          </label>
-          <div className="inline-actions">
-            <button type="submit" className="btn btn--primary" disabled={isSaving}>{isSaving ? mediaFile ? "Uploading..." : "Saving..." : editingId ? "Save memory" : "Add memory"}</button>
+          </details>
+
+          <div className="memory-composer__footer">
+            <label className={`memory-media-button ${isSaving ? "is-disabled" : ""}`}>
+              <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" onChange={handleMediaFile} disabled={isSaving} />
+              <span aria-hidden="true">＋</span> Photo / video
+            </label>
+            <small>Photos up to 10MB · videos up to 50MB</small>
+            <button type="submit" className="btn btn--primary memory-post-button" disabled={isSaving}>
+              {isSaving ? (mediaFile ? "Uploading media…" : "Posting…") : (editingId ? "Save changes" : "Post memory")}
+            </button>
             {editingId ? <button type="button" className="btn btn--secondary" disabled={isSaving} onClick={resetMemoryForm}>Cancel</button> : null}
           </div>
         </form>
 
-        <section className="panel memory-album-panel journal-panel">
-          <div className="memory-panel-heading">
+        <section className="memory-album-panel memory-feed-panel">
+          <div className="memory-panel-heading memory-feed-heading">
             <div>
-              <p className="eyebrow">Timeline</p>
-              <h2>Family travel album</h2>
+              <p className="eyebrow">Family feed</p>
+              <h2>Moments we shared</h2>
             </div>
             <Link to="/trips" className="btn btn--secondary">View trips</Link>
           </div>
           {!memories.length && !message ? (
             <div className="empty-state">
-              <strong>Capture your first family memory.</strong>
-              <p>Your travel stories will appear here, grouped by trip and date.</p>
+              <strong>No memories yet — share the first moment from your trip.</strong>
+              <p>Write a story, add a favourite photo or video, and begin your private family feed.</p>
             </div>
           ) : null}
 
-          <div className="memory-timeline">
-            {groupedMemories.map((group) => (
-              <section className="memory-trip-section" key={group.tripName}>
-                <h3>{group.tripName}</h3>
-                {group.dates.map(({ dateKey, items }) => (
-                  <div className="memory-date-group" key={`${group.tripName}-${dateKey}`}>
-                    <div className="memory-date-marker">
-                      <span>{dateKey === "undated" ? "Undated" : formatMemoryDate(dateKey)}</span>
+          <div className="memory-feed">
+            {memories.map((memory) => {
+              const authorName = memory.creator_name || "Family member";
+              const reactionTotal = reactions.reduce(
+                (total, reaction) => total + Number(memory[reaction.countKey] || 0),
+                0
+              );
+
+              return (
+                <article className="memory-feed-post" key={memory.id}>
+                  <header className="memory-feed-post__header">
+                    <span className="memory-feed-post__avatar" aria-hidden="true">{getInitials(authorName)}</span>
+                    <div className="memory-feed-post__author">
+                      <strong>{authorName}</strong>
+                      <p>
+                        {memory.trip_title ? <span className="memory-trip-tag">◇ {memory.trip_title}</span> : "Shared a travel memory"}
+                        <span aria-hidden="true"> · </span>
+                        <time dateTime={(memory.memory_date || memory.created_at || "").slice(0, 10)}>
+                          {formatMemoryDate(memory.memory_date || memory.created_at)}
+                        </time>
+                      </p>
                     </div>
-                    <div className="memory-grid memory-grid--album masonry-journal scrapbook-grid">
-                      {items.map((memory) => (
-                        <article className="memory-card album-card ts-card memory-story-card scrapbook-entry" key={memory.id}>
-                          <MediaPreview memory={memory} />
-                          <div className="album-card__body">
-                            <div className="memory-card__meta">
-                              <span className="pill">{memory.media_type}</span>
-                              <small>{formatMemoryDate(memory.memory_date)}</small>
-                            </div>
-                            <h3>{memory.title}</h3>
-                            <p>{memory.story}</p>
-                            <small>
-                              {memory.trip_title || "General memory"}
-                              <span className="ts-separator"></span>
-                              by {memory.creator_name || "Unknown"}
-                            </small>
-                            {(memory.members || []).length ? (
-                              <div className="memory-member-row">
-                                {memory.members.map((member) => (
-                                  <span key={member.id}>{member.full_name}</span>
-                                ))}
-                              </div>
-                            ) : null}
-                            {memory.media_url ? <a href={memory.media_url} target="_blank" rel="noreferrer">Open media link</a> : null}
-                            {memory.media_reference ? <p className="media-reference">{memory.media_reference}</p> : null}
-                            <div className="reaction-row">
-                              {reactions.map((reaction) => (
-                                <button
-                                  type="button"
-                                  className={`reaction-button ${memory[reaction.reactedKey] ? "is-reacted" : ""}`}
-                                  key={reaction.key}
-                                  onClick={() => reactToMemory(memory, reaction.key)}
-                                >
-                                  <span>{reaction.icon}</span>
-                                  <strong>{Number(memory[reaction.countKey] || 0)}</strong>
-                                  <small>{reaction.label}</small>
-                                </button>
-                              ))}
-                            </div>
-                            {(user?.role === "admin" || user?.id === memory.created_by) ? (
-                              <div className="inline-actions">
-                                <button type="button" className="btn btn--secondary" onClick={() => editMemory(memory)}>Edit</button>
-                                <button type="button" className="btn btn--secondary" onClick={() => deleteMemory(memory)}>Delete</button>
-                              </div>
-                            ) : null}
-                          </div>
-                        </article>
-                      ))}
-                    </div>
+                    {(user?.role === "admin" || user?.id === memory.created_by) ? (
+                      <div className="memory-post-actions">
+                        <button type="button" onClick={() => editMemory(memory)}>Edit</button>
+                        <button type="button" onClick={() => deleteMemory(memory)}>Delete</button>
+                      </div>
+                    ) : null}
+                  </header>
+
+                  <div className="memory-feed-post__copy">
+                    {memory.title ? <h3>{memory.title}</h3> : null}
+                    <p>{memory.story}</p>
                   </div>
-                ))}
-              </section>
-            ))}
+
+                  <MediaPreview memory={memory} />
+
+                  {(memory.members || []).length ? (
+                    <div className="memory-feed-post__people">
+                      <span>With</span>
+                      {memory.members.map((member) => <strong key={member.id}>{member.full_name}</strong>)}
+                    </div>
+                  ) : null}
+
+                  <div className="memory-feed-post__engagement">
+                    <span>{reactionTotal} {reactionTotal === 1 ? "reaction" : "reactions"}</span>
+                  </div>
+                  <div className="reaction-row memory-feed-reactions">
+                    {reactions.map((reaction) => (
+                      <button
+                        type="button"
+                        className={`reaction-button ${memory[reaction.reactedKey] ? "is-reacted" : ""}`}
+                        key={reaction.key}
+                        aria-pressed={Boolean(memory[reaction.reactedKey])}
+                        aria-label={`${reaction.label}: ${Number(memory[reaction.countKey] || 0)} reactions${memory[reaction.reactedKey] ? ", selected" : ""}`}
+                        disabled={reactingKey === `${memory.id}-${reaction.key}`}
+                        onClick={() => reactToMemory(memory, reaction.key)}
+                      >
+                        <span>{reaction.icon}</span>
+                        <small>{reaction.label}</small>
+                        <strong>{Number(memory[reaction.countKey] || 0)}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       </div>

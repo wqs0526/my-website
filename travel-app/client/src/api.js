@@ -1,4 +1,4 @@
-const API_BASE_URL = (process.env.REACT_APP_API_URL || "").replace(/\/$/, "");
+const API_BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/$/, "");
 const TOKEN_KEY = "travelSyncToken";
 
 export function getToken() {
@@ -25,7 +25,8 @@ export async function apiRequest(path, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
+  const requestUrl = /^https?:\/\//i.test(path) ? path : `${API_BASE_URL}${path}`;
+  const response = await fetch(requestUrl, {
     ...options,
     cache: "no-store",
     headers,
@@ -38,4 +39,14 @@ export async function apiRequest(path, options = {}) {
   }
 
   return data;
+}
+
+export function uploadMemoryMedia(file) {
+  const uploadBody = new FormData();
+  uploadBody.append("media", file);
+
+  return apiRequest(`${API_BASE_URL}/api/uploads/memory-media`, {
+    method: "POST",
+    body: uploadBody,
+  });
 }
