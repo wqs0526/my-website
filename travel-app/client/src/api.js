@@ -42,11 +42,23 @@ export async function apiRequest(path, options = {}) {
 }
 
 export function uploadMemoryMedia(files) {
-  const uploadBody = new FormData();
-  files.forEach((file) => uploadBody.append("media", file));
+  const selectedFiles = typeof File !== "undefined" && files instanceof File
+    ? [files]
+    : Array.from(files || []);
+
+  if (!selectedFiles.length) {
+    throw new Error("Choose at least one photo or video to upload.");
+  }
+
+  if (selectedFiles.length > 10) {
+    throw new Error("You can attach up to 10 photos or videos to one memory.");
+  }
+
+  const formData = new FormData();
+  selectedFiles.forEach((file) => formData.append("media", file));
 
   return apiRequest(`${API_BASE_URL}/api/uploads/memory-media`, {
     method: "POST",
-    body: uploadBody,
+    body: formData,
   });
 }

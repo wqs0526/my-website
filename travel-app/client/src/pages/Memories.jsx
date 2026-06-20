@@ -101,6 +101,7 @@ function Memories() {
   const [messageType, setMessageType] = useState("error");
   const [postingStage, setPostingStage] = useState("idle");
   const [reactingKey, setReactingKey] = useState("");
+  const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const selectedMediaFilesRef = useRef([]);
 
   const loadData = useCallback(async () => {
@@ -138,6 +139,7 @@ function Memories() {
     setEditingId(null);
     setSelectedMediaFiles([]);
     setExistingMediaItems([]);
+    setIsTripPickerOpen(false);
     setFileInputKey((key) => key + 1);
   };
 
@@ -151,6 +153,16 @@ function Memories() {
 
   const removeExistingMedia = (itemToRemove) => {
     setExistingMediaItems((current) => current.filter((item) => item !== itemToRemove));
+  };
+
+  const toggleFamilyMember = (personId) => {
+    const normalizedId = String(personId);
+    setForm((current) => ({
+      ...current,
+      memberIds: current.memberIds.map(String).includes(normalizedId)
+        ? current.memberIds.filter((id) => String(id) !== normalizedId)
+        : [...current.memberIds, normalizedId],
+    }));
   };
 
   const handleMediaFiles = (event) => {
@@ -262,6 +274,7 @@ function Memories() {
     selectedMediaFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
     setSelectedMediaFiles([]);
     setExistingMediaItems(getMemoryMedia(memory));
+    setIsTripPickerOpen(false);
     setFileInputKey((key) => key + 1);
     setEditingId(memory.id);
     setForm({
@@ -302,6 +315,7 @@ function Memories() {
 
   const totalMediaCount = existingMediaItems.length + selectedMediaFiles.length;
   const displayName = user?.full_name || user?.name || user?.email?.split("@")[0] || "Family member";
+  const selectedTrip = trips.find((trip) => String(trip.id) === String(form.tripId));
 
   return (
     <AppShell user={user}>
@@ -392,36 +406,101 @@ function Memories() {
           ) : null}
 
           <div className="memory-composer__details">
-            <label>
-              <span>Tag a trip</span>
-              <select value={form.tripId} onChange={(e) => setForm({ ...form, tripId: e.target.value })}>
-                <option value="">Choose a trip (optional)</option>
-                {trips.map((trip) => <option value={trip.id} key={trip.id}>{trip.title}</option>)}
-              </select>
-            </label>
-            <label>
+            <div className="trip-tag-picker">
+              <span className="memory-field-label">Tag a trip <small>Optional</small></span>
+              <div className={`trip-tag-picker__control ${selectedTrip ? "has-selection" : ""}`}>
+                <button
+                  type="button"
+                  className="trip-tag-picker__trigger"
+                  aria-expanded={isTripPickerOpen}
+                  aria-haspopup="listbox"
+                  onClick={() => setIsTripPickerOpen((open) => !open)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsTripPickerOpen(false);
+                  }}
+                >
+                  <span className="trip-tag-picker__icon" aria-hidden="true">⌖</span>
+                  <span className="trip-tag-picker__text">
+                    <strong>{selectedTrip?.title || "Choose a trip to tag"}</strong>
+                    <small>{selectedTrip?.destination || (trips.length ? "Add this memory to a trip" : "No trips available yet")}</small>
+                  </span>
+                  <span className="trip-tag-picker__chevron" aria-hidden="true">⌄</span>
+                </button>
+                {selectedTrip ? (
+                  <button
+                    type="button"
+                    className="trip-tag-picker__clear"
+                    aria-label={`Remove ${selectedTrip.title} trip tag`}
+                    onClick={() => {
+                      setForm((current) => ({ ...current, tripId: "" }));
+                      setIsTripPickerOpen(false);
+                    }}
+                  >×</button>
+                ) : null}
+              </div>
+              {isTripPickerOpen ? (
+                <div className="trip-tag-picker__menu" role="listbox" aria-label="Choose a trip to tag">
+                  {trips.length ? trips.map((trip) => {
+                    const isSelected = String(trip.id) === String(form.tripId);
+                    return (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={isSelected}
+                        className={isSelected ? "is-selected" : ""}
+                        key={trip.id}
+                        onClick={() => {
+                          setForm((current) => ({ ...current, tripId: String(trip.id) }));
+                          setIsTripPickerOpen(false);
+                        }}
+                      >
+                        <span aria-hidden="true">⌖</span>
+                        <span><strong>{trip.title}</strong><small>{trip.destination || "Travel trip"}</small></span>
+                        {isSelected ? <span aria-hidden="true">✓</span> : null}
+                      </button>
+                    );
+                  }) : <p>No trips yet. Create a trip first to tag it here.</p>}
+                </div>
+              ) : null}
+            </div>
+            <label className="memory-date-field">
               <span>When did this happen?</span>
               <input type="date" value={form.memoryDate} onChange={(e) => setForm({ ...form, memoryDate: e.target.value })} />
             </label>
           </div>
 
-          <details className="memory-family-picker">
-            <summary>Tag family members <span>Optional</span></summary>
-            <select
-              multiple
-              value={form.memberIds}
-              onChange={(e) => setForm({ ...form, memberIds: Array.from(e.target.selectedOptions, (option) => option.value) })}
-            >
-              {users.map((person) => (
-                <option value={person.id} key={person.id}>{person.full_name} ({person.email})</option>
-              ))}
-            </select>
-          </details>
+          <section className="family-tag-picker" aria-labelledby="family-tag-label">
+            <div className="family-tag-picker__heading">
+              <div>
+                <span className="memory-field-label" id="family-tag-label">Tag family members <small>Optional</small></span>
+                <p>Choose everyone who shared this moment.</p>
+              </div>
+              <strong>{form.memberIds.length} selected</strong>
+            </div>
+            <div className="family-tag-picker__chips">
+              {users.length ? users.map((person) => {
+                const isSelected = form.memberIds.map(String).includes(String(person.id));
+                return (
+                  <button
+                    type="button"
+                    className={`family-tag-chip ${isSelected ? "is-selected" : ""}`}
+                    aria-pressed={isSelected}
+                    key={person.id}
+                    onClick={() => toggleFamilyMember(person.id)}
+                  >
+                    <span className="family-tag-chip__avatar" aria-hidden="true">{getInitials(person.full_name)}</span>
+                    <span>{person.full_name}</span>
+                    {isSelected ? <span className="family-tag-chip__check" aria-hidden="true">✓</span> : null}
+                  </button>
+                );
+              }) : <p className="family-tag-picker__empty">No family members are available to tag yet.</p>}
+            </div>
+          </section>
 
           <div className="memory-composer__footer">
             <label className={`memory-media-button ${isSaving || totalMediaCount >= MAX_MEDIA_FILES ? "is-disabled" : ""}`}>
               <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" multiple onChange={handleMediaFiles} disabled={isSaving || totalMediaCount >= MAX_MEDIA_FILES} />
-              <span aria-hidden="true">＋</span> Photo / video
+              <span aria-hidden="true">+</span> Add photos/videos
             </label>
             <small>Up to 10 files · photos 20MB each · videos 100MB each</small>
             <button type="submit" className="btn btn--primary memory-post-button" disabled={isSaving}>
@@ -440,7 +519,8 @@ function Memories() {
             <Link to="/trips" className="btn btn--secondary">View trips</Link>
           </div>
           {!memories.length && !message ? (
-            <div className="empty-state">
+            <div className="empty-state memory-feed-empty">
+              <span className="memory-feed-empty__visual" aria-hidden="true">&#127748;</span>
               <strong>No memories yet — share the first moment from your trip.</strong>
               <p>Write a story, add a favourite photo or video, and begin your private family feed.</p>
             </div>

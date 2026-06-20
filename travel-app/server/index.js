@@ -37,7 +37,9 @@ const memoryMediaUpload = multer({
     const isVideo = file.mimetype.startsWith("video/");
 
     if (!isImage && !isVideo) {
-      return callback(new Error("Only image and video files are allowed."));
+      const invalidTypeError = new Error(`${file.originalname} is not a supported image or video.`);
+      invalidTypeError.code = "INVALID_MEDIA_TYPE";
+      return callback(invalidTypeError);
     }
 
     return callback(null, true);
@@ -156,17 +158,37 @@ function acceptMemoryMedia(req, res, next) {
 
     if (error instanceof multer.MulterError) {
       if (error.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ message: "Each video must be 100MB or smaller and each image must be 20MB or smaller." });
+        return res.status(413).json({
+          code: "MEDIA_FILE_TOO_LARGE",
+          message: "Each video must be 100MB or smaller and each image must be 20MB or smaller.",
+        });
       }
 
-      if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
-        return res.status(400).json({ message: "You can attach up to 10 photos or videos to one memory." });
+      if (error.code === "LIMIT_FILE_COUNT" || (error.code === "LIMIT_UNEXPECTED_FILE" && error.field === "media")) {
+        return res.status(400).json({
+          code: "TOO_MANY_MEDIA_FILES",
+          message: "You can attach up to 10 photos or videos to one memory.",
+        });
       }
 
-      return res.status(400).json({ message: `Upload failed: ${error.message}` });
+      if (error.code === "LIMIT_UNEXPECTED_FILE") {
+        return res.status(400).json({
+          code: "INVALID_MEDIA_FIELD",
+          message: `The upload field must be named "media", not "${error.field || "unknown"}".`,
+        });
+      }
+
+      return res.status(400).json({ code: error.code, message: `Upload failed: ${error.message}` });
     }
 
-    return res.status(400).json({ message: error.message || "The selected file could not be uploaded." });
+    if (error.code === "INVALID_MEDIA_TYPE") {
+      return res.status(400).json({ code: error.code, message: error.message });
+    }
+
+    return res.status(400).json({
+      code: "MEDIA_UPLOAD_INVALID",
+      message: error.message || "The selected file could not be uploaded.",
+    });
   });
 }
 
@@ -839,18 +861,27 @@ app.post("/api/uploads/memory-media", authenticate, acceptMemoryMedia, async (re
   }
 
   if (!req.files?.length) {
-    return res.status(400).json({ message: "Choose at least one image or video to upload." });
+    return res.status(400).json({
+      code: "NO_MEDIA_FILES",
+      message: "Choose at least one image or video to upload using the media field.",
+    });
   }
 
   if (req.files.length > 10) {
-    return res.status(400).json({ message: "You can attach up to 10 photos or videos to one memory." });
+    return res.status(400).json({
+      code: "TOO_MANY_MEDIA_FILES",
+      message: "You can attach up to 10 photos or videos to one memory.",
+    });
   }
 
   const oversizedImage = req.files.find(
     (file) => file.mimetype.startsWith("image/") && file.size > 20 * 1024 * 1024
   );
   if (oversizedImage) {
-    return res.status(413).json({ message: `${oversizedImage.originalname} is larger than the 20MB image limit.` });
+    return res.status(413).json({
+      code: "MEDIA_FILE_TOO_LARGE",
+      message: `${oversizedImage.originalname} is larger than the 20MB image limit.`,
+    });
   }
 
   const uploadedResults = [];
