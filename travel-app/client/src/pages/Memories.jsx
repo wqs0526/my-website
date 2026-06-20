@@ -103,6 +103,7 @@ function Memories() {
   const [reactingKey, setReactingKey] = useState("");
   const [isTripPickerOpen, setIsTripPickerOpen] = useState(false);
   const selectedMediaFilesRef = useRef([]);
+  const isPostingRef = useRef(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -217,6 +218,7 @@ function Memories() {
 
   const saveMemory = async (event) => {
     event.preventDefault();
+    if (isPostingRef.current) return;
     setMessage("");
 
     if (!form.story.trim()) {
@@ -225,6 +227,7 @@ function Memories() {
       return;
     }
 
+    isPostingRef.current = true;
     setIsSaving(true);
     setPostingStage(selectedMediaFiles.length ? "uploading" : "posting");
 
@@ -237,7 +240,9 @@ function Memories() {
 
       let uploadedMediaItems = [];
       if (selectedMediaFiles.length) {
-        const uploadedMedia = await uploadMemoryMedia(selectedMediaFiles.map((item) => item.file));
+        const uploadFormData = new FormData();
+        selectedMediaFiles.forEach((item) => uploadFormData.append("media", item.file));
+        const uploadedMedia = await uploadMemoryMedia(uploadFormData);
         uploadedMediaItems = uploadedMedia.mediaItems || [];
         if (uploadedMediaItems.length !== selectedMediaFiles.length) {
           throw new Error("Not all media files finished uploading. Nothing was posted, so please try again.");
@@ -265,6 +270,7 @@ function Memories() {
       setMessageType("error");
       setMessage(error.message);
     } finally {
+      isPostingRef.current = false;
       setIsSaving(false);
       setPostingStage("idle");
     }

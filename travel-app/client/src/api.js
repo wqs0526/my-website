@@ -41,11 +41,12 @@ export async function apiRequest(path, options = {}) {
   return data;
 }
 
-export function uploadMemoryMedia(files) {
-  const selectedFiles = typeof File !== "undefined" && files instanceof File
-    ? [files]
-    : Array.from(files || []);
+export function uploadMemoryMedia(formData) {
+  if (!(formData instanceof FormData)) {
+    throw new Error("The media upload request could not be prepared.");
+  }
 
+  const selectedFiles = formData.getAll("media");
   if (!selectedFiles.length) {
     throw new Error("No media files were uploaded.");
   }
@@ -53,9 +54,6 @@ export function uploadMemoryMedia(files) {
   if (selectedFiles.length > 10) {
     throw new Error("You can upload up to 10 files per post.");
   }
-
-  const formData = new FormData();
-  selectedFiles.forEach((file) => formData.append("media", file));
 
   return apiRequest(`${API_BASE_URL}/api/uploads/memory-media`, {
     method: "POST",
