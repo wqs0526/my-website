@@ -47,11 +47,11 @@ export function uploadMemoryMedia(files) {
     : Array.from(files || []);
 
   if (!selectedFiles.length) {
-    throw new Error("Choose at least one photo or video to upload.");
+    throw new Error("No media files were uploaded.");
   }
 
   if (selectedFiles.length > 10) {
-    throw new Error("You can attach up to 10 photos or videos to one memory.");
+    throw new Error("You can upload up to 10 files per post.");
   }
 
   const formData = new FormData();

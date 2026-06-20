@@ -172,7 +172,7 @@ function Memories() {
 
     if (existingMediaItems.length + selectedMediaFiles.length + files.length > MAX_MEDIA_FILES) {
       setMessageType("error");
-      setMessage(`You can attach up to ${MAX_MEDIA_FILES} photos or videos to one memory.`);
+      setMessage("You can upload up to 10 files per post.");
       return;
     }
 
@@ -181,7 +181,7 @@ function Memories() {
     );
     if (unsupportedFile) {
       setMessageType("error");
-      setMessage(`${unsupportedFile.name} is not a supported photo or video.`);
+      setMessage("Only image and video files are allowed.");
       return;
     }
 
@@ -190,7 +190,7 @@ function Memories() {
     );
     if (oversizedImage) {
       setMessageType("error");
-      setMessage(`${oversizedImage.name} is larger than the 20MB image limit.`);
+      setMessage("Images must be 20MB or smaller. Videos must be 100MB or smaller.");
       return;
     }
 
@@ -199,7 +199,7 @@ function Memories() {
     );
     if (oversizedVideo) {
       setMessageType("error");
-      setMessage(`${oversizedVideo.name} is larger than the 100MB video limit.`);
+      setMessage("Images must be 20MB or smaller. Videos must be 100MB or smaller.");
       return;
     }
 

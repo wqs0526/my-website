@@ -152,43 +152,49 @@ async function syncMemoryMembers(memoryId, memberIds, addedBy, executor = db) {
   }
 }
 
+function rejectMemoryMediaUpload(req, res, status, message, error = {}) {
+  console.warn("Memory media upload rejected:", {
+    message,
+    reason: error.message || null,
+    code: error.code || null,
+    field: error.field || null,
+    fileCount: Array.isArray(req.files) ? req.files.length : 0,
+    userId: req.user?.id || null,
+  });
+  return res.status(status).json({ message });
+}
+
 function acceptMemoryMedia(req, res, next) {
   memoryMediaUpload.array("media", 10)(req, res, (error) => {
     if (!error) return next();
 
     if (error instanceof multer.MulterError) {
       if (error.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({
-          code: "MEDIA_FILE_TOO_LARGE",
-          message: "Each video must be 100MB or smaller and each image must be 20MB or smaller.",
-        });
+        return rejectMemoryMediaUpload(
+          req,
+          res,
+          413,
+          "Images must be 20MB or smaller. Videos must be 100MB or smaller.",
+          error
+        );
       }
 
       if (error.code === "LIMIT_FILE_COUNT" || (error.code === "LIMIT_UNEXPECTED_FILE" && error.field === "media")) {
-        return res.status(400).json({
-          code: "TOO_MANY_MEDIA_FILES",
-          message: "You can attach up to 10 photos or videos to one memory.",
-        });
+        return rejectMemoryMediaUpload(req, res, 400, "You can upload up to 10 files per post.", error);
       }
 
       if (error.code === "LIMIT_UNEXPECTED_FILE") {
-        return res.status(400).json({
-          code: "INVALID_MEDIA_FIELD",
-          message: `The upload field must be named "media", not "${error.field || "unknown"}".`,
-        });
+        return rejectMemoryMediaUpload(req, res, 400, "No media files were uploaded.", error);
       }
 
-      return res.status(400).json({ code: error.code, message: `Upload failed: ${error.message}` });
+      return rejectMemoryMediaUpload(req, res, 400, "No media files were uploaded.", error);
     }
 
     if (error.code === "INVALID_MEDIA_TYPE") {
-      return res.status(400).json({ code: error.code, message: error.message });
+      return rejectMemoryMediaUpload(req, res, 400, "Only image and video files are allowed.", error);
     }
 
-    return res.status(400).json({
-      code: "MEDIA_UPLOAD_INVALID",
-      message: error.message || "The selected file could not be uploaded.",
-    });
+    return rejectMemoryMediaUpload(req, res, 400, "No media files were uploaded.", error);
   });
 }
 
@@ -861,27 +867,24 @@ app.post("/api/uploads/memory-media", authenticate, acceptMemoryMedia, async (re
   }
 
   if (!req.files?.length) {
-    return res.status(400).json({
-      code: "NO_MEDIA_FILES",
-      message: "Choose at least one image or video to upload using the media field.",
-    });
+    return rejectMemoryMediaUpload(req, res, 400, "No media files were uploaded.");
   }
 
   if (req.files.length > 10) {
-    return res.status(400).json({
-      code: "TOO_MANY_MEDIA_FILES",
-      message: "You can attach up to 10 photos or videos to one memory.",
-    });
+    return rejectMemoryMediaUpload(req, res, 400, "You can upload up to 10 files per post.");
   }
 
   const oversizedImage = req.files.find(
     (file) => file.mimetype.startsWith("image/") && file.size > 20 * 1024 * 1024
   );
   if (oversizedImage) {
-    return res.status(413).json({
-      code: "MEDIA_FILE_TOO_LARGE",
-      message: `${oversizedImage.originalname} is larger than the 20MB image limit.`,
-    });
+    return rejectMemoryMediaUpload(
+      req,
+      res,
+      413,
+      "Images must be 20MB or smaller. Videos must be 100MB or smaller.",
+      { message: `${oversizedImage.originalname} exceeded the 20MB image limit.` }
+    );
   }
 
   const uploadedResults = [];
