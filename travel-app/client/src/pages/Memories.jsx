@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest, uploadMemoryMedia } from "../api";
 import AppShell from "../components/AppShell";
@@ -15,8 +15,9 @@ const blankMemory = {
   memberIds: [],
 };
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+const MAX_MEDIA_FILES = 10;
+const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 100 * 1024 * 1024;
 
 const reactions = [
   { key: "love", label: "Love", icon: "L", countKey: "love_count", reactedKey: "reacted_love" },
@@ -46,32 +47,42 @@ function getFallbackTitle(story) {
   return firstLine.slice(0, 80) || "A family travel memory";
 }
 
-function MediaPreview({ memory }) {
-  if (!memory.media_url) {
-    return null;
-  }
+function getMemoryMedia(memory) {
+  if (memory.mediaItems?.length) return memory.mediaItems;
+  if (!memory.media_url) return [];
+  return [{
+    id: `legacy-${memory.id}`,
+    mediaUrl: memory.media_url,
+    mediaReference: memory.media_reference,
+    mediaType: memory.media_type || "photo",
+    sortOrder: 0,
+  }];
+}
 
-  if (memory.media_type === "photo") {
-    return (
-      <a className="memory-media-link" href={memory.media_url} target="_blank" rel="noreferrer">
-        <img src={memory.media_url} alt={memory.title} />
-      </a>
-    );
-  }
+function MemoryMediaGallery({ memory }) {
+  const mediaItems = getMemoryMedia(memory);
+  if (!mediaItems.length) return null;
 
-  if (memory.media_type === "video") {
-    return (
-      <video className="memory-media-video" src={memory.media_url} controls>
-        <a href={memory.media_url}>Open video</a>
-      </video>
-    );
-  }
+  const visibleItems = mediaItems.slice(0, 4);
+  const remainingCount = mediaItems.length - visibleItems.length;
 
   return (
-    <a className="media-placeholder memory-photo-placeholder" href={memory.media_url} target="_blank" rel="noreferrer">
-      <span className="pill">{memory.media_type}</span>
-      <strong>Open media link</strong>
-    </a>
+    <div className={`memory-post-media-grid memory-post-media-grid--${Math.min(mediaItems.length, 4)}`}>
+      {visibleItems.map((item, index) => (
+        <div className="memory-post-media-item" key={item.id || item.mediaReference || `${item.mediaUrl}-${index}`}>
+          {item.mediaType === "video" ? (
+            <video src={item.mediaUrl} controls preload="metadata">Video preview unavailable.</video>
+          ) : (
+            <a href={item.mediaUrl} target="_blank" rel="noreferrer">
+              <img src={item.mediaUrl} alt={`${memory.title || "Travel memory"} ${index + 1}`} />
+            </a>
+          )}
+          {index === visibleItems.length - 1 && remainingCount > 0 ? (
+            <span className="memory-media-more" aria-label={`${remainingCount} more media items`}>+{remainingCount}</span>
+          ) : null}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -83,13 +94,14 @@ function Memories() {
   const [form, setForm] = useState(blankMemory);
   const [editingId, setEditingId] = useState(null);
   const [message, setMessage] = useState("");
-  const [mediaFile, setMediaFile] = useState(null);
-  const [mediaPreviewUrl, setMediaPreviewUrl] = useState("");
+  const [selectedMediaFiles, setSelectedMediaFiles] = useState([]);
+  const [existingMediaItems, setExistingMediaItems] = useState([]);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
   const [messageType, setMessageType] = useState("error");
   const [postingStage, setPostingStage] = useState("idle");
   const [reactingKey, setReactingKey] = useState("");
+  const selectedMediaFilesRef = useRef([]);
 
   const loadData = useCallback(async () => {
     try {
@@ -113,73 +125,82 @@ function Memories() {
   }, [loadData]);
 
   useEffect(() => {
-    return () => {
-      if (mediaPreviewUrl) URL.revokeObjectURL(mediaPreviewUrl);
-    };
-  }, [mediaPreviewUrl]);
+    selectedMediaFilesRef.current = selectedMediaFiles;
+  }, [selectedMediaFiles]);
+
+  useEffect(() => () => {
+    selectedMediaFilesRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+  }, []);
 
   const resetMemoryForm = () => {
+    selectedMediaFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
     setForm(blankMemory);
     setEditingId(null);
-    setMediaFile(null);
-    setMediaPreviewUrl("");
+    setSelectedMediaFiles([]);
+    setExistingMediaItems([]);
     setFileInputKey((key) => key + 1);
   };
 
-  const clearSelectedMedia = () => {
-    setMediaFile(null);
-    setMediaPreviewUrl("");
-    setFileInputKey((key) => key + 1);
-    setForm((current) => ({
-      ...current,
-      mediaUrl: "",
-      mediaReference: "",
-      mediaType: "photo",
+  const removeSelectedMedia = (key) => {
+    setSelectedMediaFiles((current) => {
+      const removedItem = current.find((item) => item.key === key);
+      if (removedItem) URL.revokeObjectURL(removedItem.previewUrl);
+      return current.filter((item) => item.key !== key);
+    });
+  };
+
+  const removeExistingMedia = (itemToRemove) => {
+    setExistingMediaItems((current) => current.filter((item) => item !== itemToRemove));
+  };
+
+  const handleMediaFiles = (event) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    if (!files.length) return;
+
+    if (existingMediaItems.length + selectedMediaFiles.length + files.length > MAX_MEDIA_FILES) {
+      setMessageType("error");
+      setMessage(`You can attach up to ${MAX_MEDIA_FILES} photos or videos to one memory.`);
+      return;
+    }
+
+    const unsupportedFile = files.find(
+      (file) => !file.type.startsWith("image/") && !file.type.startsWith("video/")
+    );
+    if (unsupportedFile) {
+      setMessageType("error");
+      setMessage(`${unsupportedFile.name} is not a supported photo or video.`);
+      return;
+    }
+
+    const oversizedImage = files.find(
+      (file) => file.type.startsWith("image/") && file.size > MAX_IMAGE_SIZE
+    );
+    if (oversizedImage) {
+      setMessageType("error");
+      setMessage(`${oversizedImage.name} is larger than the 20MB image limit.`);
+      return;
+    }
+
+    const oversizedVideo = files.find(
+      (file) => file.type.startsWith("video/") && file.size > MAX_VIDEO_SIZE
+    );
+    if (oversizedVideo) {
+      setMessageType("error");
+      setMessage(`${oversizedVideo.name} is larger than the 100MB video limit.`);
+      return;
+    }
+
+    const timestamp = Date.now();
+    const newItems = files.map((file, index) => ({
+      key: `${timestamp}-${index}-${file.name}`,
+      file,
+      name: file.name,
+      mediaType: file.type.startsWith("video/") ? "video" : "photo",
+      previewUrl: URL.createObjectURL(file),
     }));
-  };
-
-  const handleMediaFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) {
-      setMediaFile(null);
-      setMediaPreviewUrl("");
-      return;
-    }
-
-    const isImage = file.type.startsWith("image/");
-    const isVideo = file.type.startsWith("video/");
-
-    if (!isImage && !isVideo) {
-      setMessageType("error");
-      setMessage("Choose an image or video file.");
-      setMediaFile(null);
-      setMediaPreviewUrl("");
-      event.target.value = "";
-      return;
-    }
-
-    if (isImage && file.size > MAX_IMAGE_SIZE) {
-      setMessageType("error");
-      setMessage("Images must be 10MB or smaller.");
-      setMediaFile(null);
-      setMediaPreviewUrl("");
-      event.target.value = "";
-      return;
-    }
-
-    if (isVideo && file.size > MAX_VIDEO_SIZE) {
-      setMessageType("error");
-      setMessage("Videos must be 50MB or smaller.");
-      setMediaFile(null);
-      setMediaPreviewUrl("");
-      event.target.value = "";
-      return;
-    }
-
     setMessage("");
-    setMediaFile(file);
-    setMediaPreviewUrl(URL.createObjectURL(file));
-    setForm((current) => ({ ...current, mediaType: isVideo ? "video" : "photo" }));
+    setSelectedMediaFiles((current) => [...current, ...newItems]);
   };
 
   const saveMemory = async (event) => {
@@ -193,7 +214,7 @@ function Memories() {
     }
 
     setIsSaving(true);
-    setPostingStage(mediaFile ? "uploading" : "posting");
+    setPostingStage(selectedMediaFiles.length ? "uploading" : "posting");
 
     try {
       let memoryPayload = {
@@ -202,11 +223,22 @@ function Memories() {
         story: form.story.trim(),
       };
 
-      if (mediaFile) {
-        const uploadedMedia = await uploadMemoryMedia(mediaFile);
-        memoryPayload = { ...memoryPayload, ...uploadedMedia };
+      let uploadedMediaItems = [];
+      if (selectedMediaFiles.length) {
+        const uploadedMedia = await uploadMemoryMedia(selectedMediaFiles.map((item) => item.file));
+        uploadedMediaItems = uploadedMedia.mediaItems || [];
+        if (uploadedMediaItems.length !== selectedMediaFiles.length) {
+          throw new Error("Not all media files finished uploading. Nothing was posted, so please try again.");
+        }
         setPostingStage("posting");
       }
+
+      memoryPayload.mediaItems = [...existingMediaItems, ...uploadedMediaItems].map((item, index) => ({
+        mediaUrl: item.mediaUrl,
+        mediaReference: item.mediaReference,
+        mediaType: item.mediaType,
+        sortOrder: index,
+      }));
 
       const path = editingId ? `/api/memories/${editingId}` : "/api/memories";
       await apiRequest(path, {
@@ -227,8 +259,9 @@ function Memories() {
   };
 
   const editMemory = (memory) => {
-    setMediaFile(null);
-    setMediaPreviewUrl("");
+    selectedMediaFiles.forEach((item) => URL.revokeObjectURL(item.previewUrl));
+    setSelectedMediaFiles([]);
+    setExistingMediaItems(getMemoryMedia(memory));
     setFileInputKey((key) => key + 1);
     setEditingId(memory.id);
     setForm({
@@ -267,10 +300,7 @@ function Memories() {
     }
   };
 
-  const selectedMediaType = mediaFile
-    ? mediaFile.type.startsWith("video/") ? "video" : "photo"
-    : form.mediaType;
-  const selectedMediaPreview = mediaPreviewUrl || form.mediaUrl;
+  const totalMediaCount = existingMediaItems.length + selectedMediaFiles.length;
   const displayName = user?.full_name || user?.name || user?.email?.split("@")[0] || "Family member";
 
   return (
@@ -319,24 +349,42 @@ function Memories() {
             <input placeholder="e.g. Sunset in Santorini" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
           </label>
 
-          {selectedMediaPreview ? (
-            <div className="memory-upload-preview">
-              {selectedMediaType === "video" ? (
-                <video src={selectedMediaPreview} controls preload="metadata">Preview unavailable.</video>
-              ) : (
-                <img src={selectedMediaPreview} alt="Selected memory preview" />
-              )}
-              <div>
-                <strong>{mediaFile?.name || form.mediaReference || "Media preview"}</strong>
-                <button type="button" className="memory-remove-media" onClick={clearSelectedMedia}>Remove</button>
+          {totalMediaCount ? (
+            <section className="memory-selected-media" aria-label="Selected media previews">
+              <div className="memory-selected-media__heading">
+                <strong>{totalMediaCount} of {MAX_MEDIA_FILES} selected</strong>
+                <span>Photos and videos will appear in this order</span>
               </div>
-            </div>
+              <div className="memory-selected-media__grid">
+                {existingMediaItems.map((item, index) => (
+                  <div className="memory-selected-media__item" key={item.id || item.mediaReference || `${item.mediaUrl}-${index}`}>
+                    {item.mediaType === "video" ? (
+                      <video src={item.mediaUrl} controls preload="metadata">Preview unavailable.</video>
+                    ) : (
+                      <img src={item.mediaUrl} alt={`Existing memory media ${index + 1}`} />
+                    )}
+                    <button type="button" onClick={() => removeExistingMedia(item)} aria-label={`Remove existing media ${index + 1}`}>Remove</button>
+                  </div>
+                ))}
+                {selectedMediaFiles.map((item, index) => (
+                  <div className="memory-selected-media__item" key={item.key}>
+                    {item.mediaType === "video" ? (
+                      <video src={item.previewUrl} controls preload="metadata">Preview unavailable.</video>
+                    ) : (
+                      <img src={item.previewUrl} alt={`Selected ${item.name}`} />
+                    )}
+                    <span title={item.name}>{item.name}</span>
+                    <button type="button" onClick={() => removeSelectedMedia(item.key)} aria-label={`Remove ${item.name}`}>Remove</button>
+                  </div>
+                ))}
+              </div>
+            </section>
           ) : null}
 
           {isSaving ? (
             <div className="memory-post-progress" role="status" aria-live="polite">
               <div className="memory-post-progress__label">
-                <strong>{postingStage === "uploading" ? "Uploading your media" : "Posting your memory"}</strong>
+                <strong>{postingStage === "uploading" ? `Uploading ${selectedMediaFiles.length} media file${selectedMediaFiles.length === 1 ? "" : "s"}` : "Posting your memory"}</strong>
                 <span>Please keep this page open</span>
               </div>
               <div className="memory-post-progress__track" aria-hidden="true"><span></span></div>
@@ -371,13 +419,13 @@ function Memories() {
           </details>
 
           <div className="memory-composer__footer">
-            <label className={`memory-media-button ${isSaving ? "is-disabled" : ""}`}>
-              <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" onChange={handleMediaFile} disabled={isSaving} />
+            <label className={`memory-media-button ${isSaving || totalMediaCount >= MAX_MEDIA_FILES ? "is-disabled" : ""}`}>
+              <input key={fileInputKey} type="file" name="media" accept="image/*,video/*" multiple onChange={handleMediaFiles} disabled={isSaving || totalMediaCount >= MAX_MEDIA_FILES} />
               <span aria-hidden="true">＋</span> Photo / video
             </label>
-            <small>Photos up to 10MB · videos up to 50MB</small>
+            <small>Up to 10 files · photos 20MB each · videos 100MB each</small>
             <button type="submit" className="btn btn--primary memory-post-button" disabled={isSaving}>
-              {isSaving ? (mediaFile ? "Uploading media…" : "Posting…") : (editingId ? "Save changes" : "Post memory")}
+              {isSaving ? (selectedMediaFiles.length ? "Uploading media…" : "Posting…") : (editingId ? "Save changes" : "Post memory")}
             </button>
             {editingId ? <button type="button" className="btn btn--secondary" disabled={isSaving} onClick={resetMemoryForm}>Cancel</button> : null}
           </div>
@@ -433,7 +481,7 @@ function Memories() {
                     <p>{memory.story}</p>
                   </div>
 
-                  <MediaPreview memory={memory} />
+                  <MemoryMediaGallery memory={memory} />
 
                   {(memory.members || []).length ? (
                     <div className="memory-feed-post__people">

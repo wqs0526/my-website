@@ -29,8 +29,8 @@ if (isCloudinaryConfigured) {
 const memoryMediaUpload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    files: 1,
-    fileSize: 50 * 1024 * 1024,
+    files: 10,
+    fileSize: 100 * 1024 * 1024,
   },
   fileFilter(req, file, callback) {
     const isImage = file.mimetype.startsWith("image/");
@@ -139,11 +139,11 @@ function normalizeMemberIds(memberIds) {
   return [...new Set(memberIds.map((id) => Number(id)).filter((id) => Number.isInteger(id) && id > 0))];
 }
 
-async function syncMemoryMembers(memoryId, memberIds, addedBy) {
-  await db.execute("DELETE FROM memory_members WHERE memory_id = ?", [memoryId]);
+async function syncMemoryMembers(memoryId, memberIds, addedBy, executor = db) {
+  await executor.execute("DELETE FROM memory_members WHERE memory_id = ?", [memoryId]);
 
   for (const userId of normalizeMemberIds(memberIds)) {
-    await db.execute(
+    await executor.execute(
       "INSERT IGNORE INTO memory_members (memory_id, user_id, added_by) VALUES (?, ?, ?)",
       [memoryId, userId, addedBy || null]
     );
@@ -151,12 +151,16 @@ async function syncMemoryMembers(memoryId, memberIds, addedBy) {
 }
 
 function acceptMemoryMedia(req, res, next) {
-  memoryMediaUpload.single("media")(req, res, (error) => {
+  memoryMediaUpload.array("media", 10)(req, res, (error) => {
     if (!error) return next();
 
     if (error instanceof multer.MulterError) {
       if (error.code === "LIMIT_FILE_SIZE") {
-        return res.status(413).json({ message: "Videos must be 50MB or smaller. Images must be 10MB or smaller." });
+        return res.status(413).json({ message: "Each video must be 100MB or smaller and each image must be 20MB or smaller." });
+      }
+
+      if (error.code === "LIMIT_FILE_COUNT" || error.code === "LIMIT_UNEXPECTED_FILE") {
+        return res.status(400).json({ message: "You can attach up to 10 photos or videos to one memory." });
       }
 
       return res.status(400).json({ message: `Upload failed: ${error.message}` });
@@ -185,6 +189,42 @@ function uploadMemoryMediaToCloudinary(file) {
 
     uploadStream.end(file.buffer);
   });
+}
+
+function normalizeMemoryMediaItems(value) {
+  if (value === undefined) return null;
+  if (!Array.isArray(value)) throw new Error("Media items must be provided as a list.");
+  if (value.length > 10) throw new Error("A memory can contain up to 10 media items.");
+
+  return value.map((item, index) => {
+    const mediaUrl = String(item?.mediaUrl || "").trim();
+    const mediaReference = String(item?.mediaReference || "").trim() || null;
+    const mediaType = ["photo", "video", "other"].includes(item?.mediaType) ? item.mediaType : "photo";
+
+    if (!mediaUrl || mediaUrl.length > 600) {
+      throw new Error("One of the uploaded media items is invalid.");
+    }
+
+    return {
+      mediaUrl,
+      mediaReference: mediaReference?.slice(0, 255) || null,
+      mediaType,
+      sortOrder: index,
+    };
+  });
+}
+
+async function replaceMemoryMedia(executor, memoryId, mediaItems) {
+  await executor.execute("DELETE FROM memory_media WHERE memory_id = ?", [memoryId]);
+
+  for (const item of mediaItems) {
+    await executor.execute(
+      `INSERT INTO memory_media
+        (memory_id, media_url, media_reference, media_type, sort_order)
+       VALUES (?, ?, ?, ?, ?)`,
+      [memoryId, item.mediaUrl, item.mediaReference, item.mediaType, item.sortOrder]
+    );
+  }
 }
 
 async function loadTrip(req, res, next) {
@@ -798,28 +838,53 @@ app.post("/api/uploads/memory-media", authenticate, acceptMemoryMedia, async (re
     return res.status(503).json({ message: "Media uploads are not configured on this server." });
   }
 
-  if (!req.file) {
-    return res.status(400).json({ message: "Choose an image or video to upload." });
+  if (!req.files?.length) {
+    return res.status(400).json({ message: "Choose at least one image or video to upload." });
   }
 
-  const isImage = req.file.mimetype.startsWith("image/");
-  if (isImage && req.file.size > 10 * 1024 * 1024) {
-    return res.status(413).json({ message: "Images must be 10MB or smaller." });
+  if (req.files.length > 10) {
+    return res.status(400).json({ message: "You can attach up to 10 photos or videos to one memory." });
   }
 
+  const oversizedImage = req.files.find(
+    (file) => file.mimetype.startsWith("image/") && file.size > 20 * 1024 * 1024
+  );
+  if (oversizedImage) {
+    return res.status(413).json({ message: `${oversizedImage.originalname} is larger than the 20MB image limit.` });
+  }
+
+  const uploadedResults = [];
   try {
-    const result = await uploadMemoryMediaToCloudinary(req.file);
-    const mediaType = isImage ? "photo" : "video";
+    for (const [index, file] of req.files.entries()) {
+      const result = await uploadMemoryMediaToCloudinary(file);
+      uploadedResults.push({ result, file, sortOrder: index });
+    }
 
-    await logAction(req.user.id, "memory_media_uploaded", result.public_id);
+    await logAction(
+      req.user.id,
+      "memory_media_uploaded",
+      uploadedResults.map(({ result }) => result.public_id).join(", ")
+    );
     return res.status(201).json({
-      mediaUrl: result.secure_url,
-      mediaReference: result.public_id,
-      mediaType,
+      mediaItems: uploadedResults.map(({ result, file, sortOrder }) => ({
+        mediaUrl: result.secure_url,
+        mediaReference: result.public_id,
+        mediaType: file.mimetype.startsWith("image/") ? "photo" : "video",
+        sortOrder,
+      })),
     });
   } catch (error) {
     console.error("Cloudinary memory upload error:", error.message);
-    return res.status(502).json({ message: "The media upload service could not process this file." });
+    await Promise.allSettled(
+      uploadedResults.map(({ result, file }) =>
+        cloudinary.uploader.destroy(result.public_id, {
+          resource_type: file.mimetype.startsWith("video/") ? "video" : "image",
+        })
+      )
+    );
+    return res.status(502).json({
+      message: "One of your files could not be uploaded. Nothing was posted, so please try again.",
+    });
   }
 });
 
@@ -852,14 +917,38 @@ app.get("/api/memories", authenticate, async (req, res) => {
        ORDER BY users.full_name ASC`,
       memoryIds
     );
+    const [mediaItems] = await db.execute(
+      `SELECT id, memory_id, media_url AS mediaUrl, media_reference AS mediaReference,
+        media_type AS mediaType, sort_order AS sortOrder, created_at AS createdAt
+       FROM memory_media
+       WHERE memory_id IN (${placeholders})
+       ORDER BY memory_id ASC, sort_order ASC, id ASC`,
+      memoryIds
+    );
     const membersByMemory = members.reduce((groups, member) => {
       groups[member.memory_id] = groups[member.memory_id] || [];
       groups[member.memory_id].push(member);
       return groups;
     }, {});
+    const mediaByMemory = mediaItems.reduce((groups, item) => {
+      groups[item.memory_id] = groups[item.memory_id] || [];
+      groups[item.memory_id].push(item);
+      return groups;
+    }, {});
 
     memories.forEach((memory) => {
       memory.members = membersByMemory[memory.id] || [];
+      memory.mediaItems = mediaByMemory[memory.id] || [];
+
+      if (!memory.mediaItems.length && memory.media_url) {
+        memory.mediaItems.push({
+          id: `legacy-${memory.id}`,
+          mediaUrl: memory.media_url,
+          mediaReference: memory.media_reference,
+          mediaType: memory.media_type || "photo",
+          sortOrder: 0,
+        });
+      }
     });
   }
 
@@ -873,25 +962,48 @@ app.post("/api/memories", authenticate, async (req, res) => {
     return res.status(400).json({ message: "Memory title is required." });
   }
 
-  const [result] = await db.execute(
-    `INSERT INTO memories
-      (trip_id, title, story, media_url, media_reference, media_type, memory_date, created_by)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [
-      tripId || null,
-      title.trim(),
-      story || null,
-      mediaUrl || null,
-      mediaReference || null,
-      mediaType || "photo",
-      memoryDate || null,
-      req.user.id,
-    ]
-  );
-  await syncMemoryMembers(result.insertId, memberIds, req.user.id);
+  let mediaItems;
+  try {
+    mediaItems = normalizeMemoryMediaItems(req.body.mediaItems);
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+
+  const primaryMedia = mediaItems?.[0];
+  const connection = await db.getConnection();
+  let memoryId;
+
+  try {
+    await connection.beginTransaction();
+    const [result] = await connection.execute(
+      `INSERT INTO memories
+        (trip_id, title, story, media_url, media_reference, media_type, memory_date, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        tripId || null,
+        title.trim(),
+        story || null,
+        primaryMedia?.mediaUrl || mediaUrl || null,
+        primaryMedia?.mediaReference || mediaReference || null,
+        primaryMedia?.mediaType || mediaType || "photo",
+        memoryDate || null,
+        req.user.id,
+      ]
+    );
+    memoryId = result.insertId;
+    await syncMemoryMembers(memoryId, memberIds, req.user.id, connection);
+    if (mediaItems) await replaceMemoryMedia(connection, memoryId, mediaItems);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    console.error("Memory creation error:", error.message);
+    return res.status(500).json({ message: "Your memory could not be saved. Nothing was posted." });
+  } finally {
+    connection.release();
+  }
 
   await logAction(req.user.id, "memory_created", title);
-  return res.status(201).json({ id: result.insertId });
+  return res.status(201).json({ id: memoryId });
 });
 
 app.put("/api/memories/:id", authenticate, loadMemory, async (req, res) => {
@@ -900,23 +1012,43 @@ app.put("/api/memories/:id", authenticate, loadMemory, async (req, res) => {
   }
 
   const { tripId, title, story, mediaUrl, mediaReference, mediaType, memoryDate, memberIds } = req.body;
-  await db.execute(
-    `UPDATE memories
-     SET trip_id = ?, title = ?, story = ?, media_url = ?, media_reference = ?,
-       media_type = ?, memory_date = ?
-     WHERE id = ?`,
-    [
-      tripId || null,
-      title,
-      story || null,
-      mediaUrl || null,
-      mediaReference || null,
-      mediaType || "photo",
-      memoryDate || null,
-      req.memory.id,
-    ]
-  );
-  await syncMemoryMembers(req.memory.id, memberIds, req.user.id);
+  let mediaItems;
+  try {
+    mediaItems = normalizeMemoryMediaItems(req.body.mediaItems);
+  } catch (error) {
+    return res.status(400).json({ message: error.message });
+  }
+
+  const primaryMedia = mediaItems?.[0];
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      `UPDATE memories
+       SET trip_id = ?, title = ?, story = ?, media_url = ?, media_reference = ?,
+         media_type = ?, memory_date = ?
+       WHERE id = ?`,
+      [
+        tripId || null,
+        title,
+        story || null,
+        mediaItems ? primaryMedia?.mediaUrl || null : mediaUrl || null,
+        mediaItems ? primaryMedia?.mediaReference || null : mediaReference || null,
+        mediaItems ? primaryMedia?.mediaType || "photo" : mediaType || "photo",
+        memoryDate || null,
+        req.memory.id,
+      ]
+    );
+    await syncMemoryMembers(req.memory.id, memberIds, req.user.id, connection);
+    if (mediaItems) await replaceMemoryMedia(connection, req.memory.id, mediaItems);
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    console.error("Memory update error:", error.message);
+    return res.status(500).json({ message: "Your changes could not be saved. The memory was not changed." });
+  } finally {
+    connection.release();
+  }
 
   await logAction(req.user.id, "memory_updated", title);
   return res.json({ message: "Memory updated." });

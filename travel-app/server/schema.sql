@@ -126,6 +126,19 @@ CREATE TABLE IF NOT EXISTS memories (
   CONSTRAINT memories_created_by_fk FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS memory_media (
+  id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  memory_id INT UNSIGNED NOT NULL,
+  media_url VARCHAR(600) NOT NULL,
+  media_reference VARCHAR(255) NULL,
+  media_type ENUM('photo', 'video', 'other') NOT NULL DEFAULT 'photo',
+  sort_order INT UNSIGNED NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY memory_media_memory_sort_index (memory_id, sort_order),
+  CONSTRAINT memory_media_memory_fk FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS memory_members (
   memory_id INT UNSIGNED NOT NULL,
   user_id INT UNSIGNED NOT NULL,
